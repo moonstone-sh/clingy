@@ -67,10 +67,12 @@ end
 
 ---Executes deterministic unwind of this scope in LIFO order.
 ---Invariant 23: Deterministic LIFO unwind on success, error, interrupt, termination.
+---Section 11: Preserves primary error + aggregated cleanup errors.
 ---@param reason string "success" | "error" | "interrupt" | "termination"
 ---@param err any? Optional error object if unwinding due to error
+---@return table Array of cleanup error objects
 function Scope:unwind(reason, err)
-  if self.unwound then return end
+  if self.unwound then return {} end
   self.unwound = true
 
   local unwind_errors = {}
@@ -79,10 +81,14 @@ function Scope:unwind(reason, err)
   for i = #self.children, 1, -1 do
     local child = self.children[i]
     local ok, c_err = pcall(function()
-      child:unwind(reason, err)
+      return child:unwind(reason, err)
     end)
     if not ok then
       table.insert(unwind_errors, c_err)
+    elseif type(c_err) == "table" then
+      for _, e in ipairs(c_err) do
+        table.insert(unwind_errors, e)
+      end
     end
   end
 
@@ -95,9 +101,18 @@ function Scope:unwind(reason, err)
     end
   end
 
+  if self.ctx and #unwind_errors > 0 then
+    self.ctx._cleanup_errors = self.ctx._cleanup_errors or {}
+    for _, ue in ipairs(unwind_errors) do
+      table.insert(self.ctx._cleanup_errors, ue)
+    end
+  end
+
   if #unwind_errors > 0 and reason == "success" then
     error("Error during scope unwind: " .. tostring(unwind_errors[1]))
   end
+
+  return unwind_errors
 end
 
 M.Scope = Scope

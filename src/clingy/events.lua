@@ -35,6 +35,7 @@ function EventEmitter:emit(event_type, data)
   data = data or {}
 
   local evt = {
+    protocol = "clingy.events.v1",
     type = event_type,
     invocation_id = self.invocation_id,
     sequence = self.sequence,
@@ -76,6 +77,7 @@ function EventEmitter:start_span(name, parent_id)
     parent_span_id = parent_id or self.current_span_id,
     name = name,
     start_time = os.time(),
+    ended = false,
   }
   self.spans[span_id] = span
   self.current_span_id = span_id
@@ -89,7 +91,8 @@ end
 
 function EventEmitter:end_span(span_id, status)
   local span = self.spans[span_id]
-  if span then
+  if span and not span.ended then
+    span.ended = true
     self:emit("span_end", {
       span_id = span_id,
       parent_span_id = span.parent_span_id,
@@ -99,6 +102,22 @@ function EventEmitter:end_span(span_id, status)
     })
     if self.current_span_id == span_id then
       self.current_span_id = span.parent_span_id
+    end
+  end
+end
+
+---Finalizes any unclosed spans during unwind (Section 24).
+function EventEmitter:finalize_spans(status)
+  for span_id, span in pairs(self.spans) do
+    if not span.ended then
+      span.ended = true
+      self:emit("span_end", {
+        span_id = span_id,
+        parent_span_id = span.parent_span_id,
+        name = span.name,
+        status = status or "interrupted",
+        duration_ms = (os.time() - span.start_time) * 1000,
+      })
     end
   end
 end

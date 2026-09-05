@@ -36,8 +36,29 @@ function M.dispatch(raw_sig, ctx, target_node, route)
     timestamp = os.time(),
   }
 
-  if ctx and ctx.bus then
-    ctx.bus:emit("signal", evt)
+  if ctx then
+    ctx._sig_counts = ctx._sig_counts or {}
+    ctx._sig_counts[norm_sig] = (ctx._sig_counts[norm_sig] or 0) + 1
+    evt.count = ctx._sig_counts[norm_sig]
+
+    if ctx.bus then
+      ctx.bus:emit("signal", evt)
+    end
+
+    -- Escalation check (Section 19):
+    -- If SIGTERM arrives during active SIGINT confirmation/prompt, cancel prompt and force shutdown immediately
+    if norm_sig == "terminate" and ctx._prompt_active then
+      ctx._prompt_active = false
+      if ctx.composer and ctx.composer.cancel_prompt then
+        ctx.composer:cancel_prompt()
+      end
+      return { action = "force_shutdown", reason = "terminate_during_confirmation" }
+    end
+
+    -- If a second SIGINT arrives, escalate immediately to force shutdown
+    if norm_sig == "interrupt" and evt.count >= 2 then
+      return { action = "force_shutdown", reason = "second_sigint" }
+    end
   end
 
   -- 1. Check nearest active node policy first, then ancestors in reverse

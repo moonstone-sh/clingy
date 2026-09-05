@@ -49,6 +49,7 @@ function M.parse(graph, argv)
 
   local passthrough_tokens = {}
   local passthrough_active = false
+  local options_closed = false
 
   local i = 1
   while i <= #argv do
@@ -58,9 +59,21 @@ function M.parse(graph, argv)
       table.insert(passthrough_tokens, token)
       i = i + 1
     elseif token == "--" then
-      -- Invariant 14: '--' terminates option and command parsing
-      passthrough_active = true
+      -- Invariant 14: '--' terminates option and subcommand recognition
+      options_closed = true
       i = i + 1
+      local has_unmet_pos = false
+      for _, arg_decl in ipairs(current_node.args) do
+        local cnt = occurrence_counts[arg_decl] or 0
+        local min = arg_decl.occurrence.min or 1
+        if cnt < min then
+          has_unmet_pos = true
+          break
+        end
+      end
+      if not has_unmet_pos then
+        passthrough_active = true
+      end
     else
       local seg_pos_consumed = positionals_consumed[active_segment] or 0
       local is_leading = current_node.mode == "leading"
@@ -68,8 +81,45 @@ function M.parse(graph, argv)
       -- Check if token is an option or flag (starts with '-' and not pure '-')
       local is_option_like = token:sub(1, 1) == "-" and #token > 1
 
+      -- Numeric literals like -1, -42 are not option-like unless explicitly declared
+      if token:match("^%-[0-9]") and not current_node.visible_options_by_name[token] then
+        is_option_like = false
+      end
+
+      -- If options were closed by '--', do not treat as option
+      if options_closed then
+        is_option_like = false
+      end
+
       -- In leading mode, once positional consumption begins, option recognition stops
-      if is_leading and seg_pos_consumed > 0 then
+      if is_leading and seg_pos_consumed > 0 and not options_closed then
+        -- Section 1: Check if token exactly matches a visible named declaration or cluster
+        local opt_name = token
+        local eq_pos = token:find("=")
+        if eq_pos then
+          opt_name = token:sub(1, eq_pos - 1)
+        end
+
+        if current_node.visible_options_by_name[opt_name] then
+          error(string.format("Misplaced option error: '%s' is a valid option for command '%s', but leading-mode option parsing ended after positional consumption began", token, current_node.name))
+        end
+
+        if current_node.short_clusters and token:match("^%-[a-zA-Z0-9]+$") and not eq_pos and not token:match("^%-%-") then
+          local all_flags = true
+          for ch_idx = 2, #token do
+            local short_name = "-" .. token:sub(ch_idx, ch_idx)
+            local ch_decl = current_node.visible_options_by_name[short_name]
+            if not (ch_decl and ch_decl.kind == "flag") then
+              all_flags = false
+              break
+            end
+          end
+          if all_flags and #token > 1 then
+            error(string.format("Misplaced option error: '%s' is a valid option cluster for command '%s', but leading-mode option parsing ended after positional consumption began", token, current_node.name))
+          end
+        end
+
+        -- Otherwise, it is not a visible option/cluster; allow positional grammar to consume it
         is_option_like = false
       end
 
@@ -165,12 +215,13 @@ function M.parse(graph, argv)
           end
 
         else
-          -- Check short flag clusters (Invariant 8)
+          -- Section 3: Check short flag clusters with transactional atomicity
           local is_cluster = false
           if current_node.short_clusters and token:match("^%-[a-zA-Z0-9]+$") and not token:match("^%-%-") and not eq_pos then
-            -- Verify all characters are visible 0-value flags
+            -- Phase 1: Inspect and validate all cluster characters
             local all_flags = true
             local cluster_decls = {}
+
             for ch_idx = 2, #token do
               local short_name = "-" .. token:sub(ch_idx, ch_idx)
               local ch_decl = current_node.visible_options_by_name[short_name]
@@ -182,6 +233,7 @@ function M.parse(graph, argv)
               end
             end
 
+            -- Phase 2: Transactional commit (all-or-nothing)
             if all_flags and #cluster_decls > 0 then
               is_cluster = true
               for _, ch_decl in ipairs(cluster_decls) do
@@ -307,6 +359,21 @@ function M.parse(graph, argv)
             positional_cursor[active_segment] = p_idx + 1
           else
             positional_cursor[active_segment] = p_idx
+          end
+
+          if options_closed then
+            local has_unmet_pos = false
+            for _, arg_decl in ipairs(current_node.args) do
+              local c_cnt = occurrence_counts[arg_decl] or 0
+              local min = arg_decl.occurrence.min or 1
+              if c_cnt < min then
+                has_unmet_pos = true
+                break
+              end
+            end
+            if not has_unmet_pos then
+              passthrough_active = true
+            end
           end
 
           i = i + 1

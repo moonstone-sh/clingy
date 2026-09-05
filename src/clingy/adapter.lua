@@ -10,6 +10,7 @@ local function get_valua()
 end
 
 ---Inspects a schema using Valua reflection or Standard Schema v1 metadata.
+---Follows base/input schema through pipes, unwraps optional/nullable/annotate wrappers.
 ---@param schema any
 ---@return table Info { kind: string, description: string?, default: any?, options: string[]? }
 function M.inspect_schema(schema)
@@ -22,13 +23,25 @@ function M.inspect_schema(schema)
     local ok, ref = pcall(valua.reflect, schema)
     if ok and ref and ref.nodes and ref.root then
       local current = ref.nodes[ref.root]
-      while current and current.kind == "pipe" and current.base do
-        current = ref.nodes[current.base]
+      local visited = {}
+
+      while current and not visited[current.id] do
+        visited[current.id] = true
+        if current.kind == "pipe" and current.base and ref.nodes[current.base] then
+          current = ref.nodes[current.base]
+        elseif current.wrapped and ref.nodes[current.wrapped] then
+          current = ref.nodes[current.wrapped]
+        elseif current.kind == "lazy" and current.inner and ref.nodes[current.inner] then
+          current = ref.nodes[current.inner]
+        else
+          break
+        end
       end
 
       local kind = current and current.kind or "unknown"
       local desc = nil
       local default_val = nil
+      local options = current and current.options or nil
 
       for _, n in pairs(ref.nodes) do
         if n.metadata then
@@ -37,11 +50,71 @@ function M.inspect_schema(schema)
         end
       end
 
+      -- Literal inspection
+      if kind == "literal" and current and current.value ~= nil then
+        local vt = type(current.value)
+        if vt == "number" then
+          kind = (math.tointeger and math.tointeger(current.value)) and "integer" or "number"
+        elseif vt == "boolean" then
+          kind = "boolean"
+        elseif vt == "string" then
+          kind = "string"
+        end
+      end
+
+      -- Picklist inspection (numeric/boolean picklists)
+      if kind == "picklist" and options and #options > 0 then
+        local all_int = true
+        local all_num = true
+        local all_bool = true
+        for _, opt in ipairs(options) do
+          if type(opt) ~= "number" then
+            all_num = false
+            all_int = false
+          elseif math.tointeger and not math.tointeger(opt) then
+            all_int = false
+          end
+          if type(opt) ~= "boolean" then
+            all_bool = false
+          end
+        end
+        if all_int then
+          kind = "integer"
+        elseif all_num then
+          kind = "number"
+        elseif all_bool then
+          kind = "boolean"
+        end
+      end
+
+      -- Union inspection
+      if kind == "union" and current and current.variants then
+        local all_int = true
+        local all_num = true
+        for _, var_id in ipairs(current.variants) do
+          local var_node = ref.nodes[var_id]
+          if var_node then
+            if var_node.kind ~= "integer" then all_int = false end
+            if var_node.kind ~= "number" and var_node.kind ~= "integer" then all_num = false end
+          else
+            all_int = false
+            all_num = false
+          end
+        end
+        if all_int then
+          kind = "integer"
+        elseif all_num then
+          kind = "number"
+        else
+          kind = "string"
+        end
+      end
+
       return {
         kind = kind,
         description = desc,
         default = default_val,
-        options = current and current.options,
+        options = options,
       }
     end
   end
@@ -90,9 +163,10 @@ function M.coerce(token, schema)
     if n then return n end
     return token
   elseif kind == "boolean" then
-    if token == "true" or token == "1" then
+    local lower = token:lower()
+    if lower == "true" or lower == "1" or lower == "yes" or lower == "on" then
       return true
-    elseif token == "false" or token == "0" then
+    elseif lower == "false" or lower == "0" or lower == "no" or lower == "off" then
       return false
     end
     return token

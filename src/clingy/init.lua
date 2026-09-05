@@ -67,6 +67,8 @@ c.signal = dsl.signal
 c.stage = dsl.stage
 
 -- Submodules
+c.help = require("clingy.help").format_help
+c.format_version = require("clingy.help").format_version
 c.scope = require("clingy.scope")
 c.process = require("clingy.process")
 c.composer = require("clingy.composer")

@@ -21,6 +21,37 @@ function App:graph()
   return self._graph.graph or self._graph
 end
 
+---Generates formatted help text for a target node or subcommand path.
+---@param node_or_path any Optional subcommand name, path table, or node
+---@return string Formatted help text
+function App:help(node_or_path)
+  local help_mod = require("clingy.help")
+  local target_node = self._graph.root
+  local path_segs = {}
+
+  if type(node_or_path) == "string" then
+    if self._graph.root.children and self._graph.root.children[node_or_path] then
+      target_node = self._graph.root.children[node_or_path]
+      table.insert(path_segs, node_or_path)
+    end
+  elseif type(node_or_path) == "table" then
+    if node_or_path.name and node_or_path.visible_options_by_name then
+      target_node = node_or_path
+    elseif #node_or_path > 0 then
+      local cur = self._graph.root
+      for _, seg_name in ipairs(node_or_path) do
+        if cur.children and cur.children[seg_name] then
+          cur = cur.children[seg_name]
+          table.insert(path_segs, seg_name)
+        end
+      end
+      target_node = cur
+    end
+  end
+
+  return help_mod.format_help(self, target_node, path_segs)
+end
+
 ---Parses argv without executing handlers. Returns parsed context data or raises error.
 ---@param argv table? Array of arguments (defaults to global arg)
 ---@return table Parsed result { route = ..., args = ..., passthrough = ..., target_node = ... }
