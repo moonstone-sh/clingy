@@ -1,0 +1,130 @@
+local scope_mod = require("clingy.scope")
+local process_mod = require("clingy.process")
+
+local M = {}
+
+local Context = {}
+Context.__index = Context
+
+function Context.new(opts)
+  opts = opts or {}
+  local self = setmetatable({}, Context)
+  self.args = opts.args or {}
+  self.route = opts.route or {}
+  self.passthrough = opts.passthrough or {}
+  self.target_node = opts.target_node
+  self.bus = opts.bus
+  self.composer = opts.composer
+  self.app = opts.app
+  self._scopes = {}
+  self._failed = false
+  self._exit_code = 0
+  return self
+end
+
+---Creates a structured resource scope with deterministic LIFO defer unwind (Section 30, Invariant 23).
+function Context:scope(fn)
+  local scope = scope_mod.create_scope(nil, self)
+  table.insert(self._scopes, scope)
+
+  local ok, res = pcall(fn, scope)
+  scope:unwind(ok and "success" or "error", not ok and res or nil)
+
+  if not ok then
+    error(res)
+  end
+  return res
+end
+
+---Spawns a managed child subprocess (Section 31, 32, Invariant 18).
+function Context:spawn(opts)
+  return process_mod.spawn(opts, self)
+end
+
+---Creates an execution span for telemetry and events.
+function Context:span(name, fn)
+  if not self.bus then
+    if fn then return fn() end
+    return nil
+  end
+
+  local span_id = self.bus:start_span(name)
+  if fn then
+    local ok, res = pcall(fn, span_id)
+    self.bus:end_span(span_id, ok and "ok" or "error")
+    if not ok then
+      error(res)
+    end
+    return res
+  end
+  return span_id
+end
+
+---Emits a progress event.
+function Context:progress(task, percent, msg)
+  if self.bus then
+    self.bus:emit("progress", {
+      task = task,
+      percentage = percent,
+      message = msg,
+    })
+  end
+end
+
+---Emits a milestone event.
+function Context:milestone(msg)
+  if self.bus then
+    self.bus:emit("milestone", {
+      message = msg,
+    })
+  end
+end
+
+---Emits a structured log event.
+function Context:log(level, msg, metadata)
+  if self.bus then
+    self.bus:emit("log", {
+      level = level or "info",
+      message = msg,
+      metadata = metadata,
+    })
+  end
+end
+
+---Emits a result event.
+function Context:result(data, msg)
+  if self.bus then
+    self.bus:emit("result", {
+      data = data,
+      message = msg,
+    })
+  end
+end
+
+---Marks execution failure.
+function Context:fail(msg_or_err, exit_code)
+  self._failed = true
+  self._exit_code = exit_code or 1
+  if self.bus then
+    self.bus:emit("diagnostic", {
+      message = tostring(msg_or_err),
+      exit_code = self._exit_code,
+    })
+  end
+end
+
+---Prompts user for confirmation via Composer ownership (Section 40).
+function Context:confirm(prompt, opts)
+  if self.composer then
+    return self.composer:confirm(prompt, opts)
+  end
+  return (opts and opts.default ~= nil) and opts.default or false
+end
+
+M.Context = Context
+
+function M.create_context(opts)
+  return Context.new(opts)
+end
+
+return M
