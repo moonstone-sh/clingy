@@ -26,25 +26,30 @@ describe("Invariant 1 & 2: Single Ownership and Explicit Inheritance", function(
     })
 
     local graph = app:graph()
-    local root_ir = graph.root
-    local init_ir = root_ir.children["init"]
-    local instant_ir = init_ir.children["instant"]
+    assert.equal(graph.format, "clingy.command-graph.v0")
+    local root_node = graph.nodes[graph.root]
+    local init_node = graph.nodes["root.init"]
+    local instant_node = graph.nodes["root.init.instant"]
 
-    assert.equal(#root_ir.flags, 1)
-    assert.equal(root_ir.flags[1].owner, "root")
-    assert.equal(root_ir.flags[1].result_key, "verbose")
+    assert.truthy(root_node)
+    assert.truthy(init_node)
+    assert.truthy(instant_node)
 
-    assert.equal(#init_ir.flags, 1)
-    assert.equal(init_ir.flags[1].owner, "init")
-    assert.equal(init_ir.flags[1].result_key, "json")
+    local verbose_b = graph.bindings["root:verbose"]
+    assert.equal(verbose_b.owner, "root")
+    assert.equal(verbose_b.result_key, "verbose")
 
-    assert.equal(#init_ir.args, 1)
-    assert.equal(init_ir.args[1].owner, "init")
-    assert.equal(init_ir.args[1].name, "profile")
+    local json_b = graph.bindings["root.init:json"]
+    assert.equal(json_b.owner, "root.init")
+    assert.equal(json_b.result_key, "json")
 
-    assert.equal(#instant_ir.flags, 1)
-    assert.equal(instant_ir.flags[1].owner, "instant")
-    assert.equal(instant_ir.flags[1].result_key, "now")
+    local profile_b = graph.bindings["root.init:profile"]
+    assert.equal(profile_b.owner, "root.init")
+    assert.equal(profile_b.name, "profile")
+
+    local now_b = graph.bindings["root.init.instant:now"]
+    assert.equal(now_b.owner, "root.init.instant")
+    assert.equal(now_b.result_key, "now")
   end)
 
   it("Invariant 2 & 10: uninherited parent flag is NOT visible to child after transition", function()

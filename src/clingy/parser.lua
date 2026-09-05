@@ -27,6 +27,9 @@ function M.parse(graph, argv)
     table.insert(route, segment)
     route_segment_by_node[node_ir] = segment
     route_segment_by_name[node_ir.name] = segment
+    if node_ir.id then
+      route_segment_by_name[node_ir.id] = segment
+    end
     active_segment = segment
     return segment
   end

@@ -20,6 +20,8 @@ local suites = {
   "tests.invariants.inv_23_deterministic_unwind_spec",
   "tests.invariants.inv_24_ndjson_event_parity_spec",
   "tests.dsl.dsl_spec",
+  "tests.graph.snapshots_spec",
+  "tests.properties.parser_properties_spec",
   "tests.integration.e2e_cli_spec",
 }
 

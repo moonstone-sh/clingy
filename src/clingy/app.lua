@@ -18,7 +18,7 @@ function App.new(graph, config)
 end
 
 function App:graph()
-  return self._graph
+  return self._graph.graph or self._graph
 end
 
 ---Parses argv without executing handlers. Returns parsed context data or raises error.
