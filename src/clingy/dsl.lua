@@ -1,4 +1,5 @@
 local util = require("clingy.util")
+local adapter = require("clingy.adapter")
 
 local M = {}
 
@@ -168,6 +169,7 @@ function M.optional(decl)
     error("c.optional must wrap a declaration (c.arg, c.option, c.flag)")
   end
   local d = util.deep_copy(decl)
+  d._inner = decl
   d.occurrence = d.occurrence or { min = 1, max = 1 }
   d.occurrence.min = 0
   return d
@@ -179,6 +181,7 @@ function M.required(decl)
     error("c.required must wrap a declaration (c.arg, c.option, c.flag)")
   end
   local d = util.deep_copy(decl)
+  d._inner = decl
   d.occurrence = d.occurrence or { min = 0, max = 1 }
   d.occurrence.min = 1
   return d
@@ -190,6 +193,7 @@ function M.repeated(decl)
     error("c.repeated must wrap a declaration (c.arg, c.option, c.flag)")
   end
   local d = util.deep_copy(decl)
+  d._inner = decl
   d.occurrence = d.occurrence or { min = 1, max = 1 }
   d.occurrence.max = nil
   if d.kind ~= "flag" then
@@ -275,5 +279,8 @@ function M.stage(stage_def)
     stage = stage_def,
   }
 end
+
+---Registers a schema adapter.
+M.schema_adapter = adapter.register
 
 return M

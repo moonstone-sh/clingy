@@ -1,17 +1,26 @@
 local M = {}
 
-function M.deep_copy(orig)
-  local orig_type = type(orig)
-  local copy
-  if orig_type == "table" then
-    copy = {}
-    for orig_key, orig_value in next, orig, nil do
-      copy[M.deep_copy(orig_key)] = M.deep_copy(orig_value)
-    end
-    setmetatable(copy, M.deep_copy(getmetatable(orig)))
-  else
-    copy = orig
+function M.deep_copy(orig, seen)
+  if type(orig) ~= "table" then
+    return orig
   end
+  seen = seen or {}
+  if seen[orig] then
+    return seen[orig]
+  end
+
+  local copy = {}
+  seen[orig] = copy
+
+  for orig_key, orig_value in next, orig, nil do
+    copy[M.deep_copy(orig_key, seen)] = M.deep_copy(orig_value, seen)
+  end
+
+  local mt = getmetatable(orig)
+  if mt then
+    setmetatable(copy, M.deep_copy(mt, seen))
+  end
+
   return copy
 end
 

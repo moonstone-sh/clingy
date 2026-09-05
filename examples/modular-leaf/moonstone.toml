@@ -1,0 +1,28 @@
+manifest_version = 2
+
+[package]
+name = "modular-leaf"
+version = "0.1.0"
+kind = "script"
+description = "Modular Leaf & Separated Router Assembly Example for Clingy"
+
+[interpreter]
+name = "lua"
+version = "5.4"
+abi = "5.4"
+
+[scripts]
+dev = "lua ./src/main.lua \"$@\""
+run = "lua ./src/main.lua"
+
+[[registries]]
+name = "test"
+resolver = "moonstone"
+path = "../../../test-reg"
+priority = 0
+
+[[dependencies]]
+name = "moonstone/valua"
+constraint = "0.2.5"
+registry = "test"
+role = "runtime"

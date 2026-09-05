@@ -445,6 +445,7 @@ function M.parse(graph, argv)
   for _, seg in ipairs(route) do
     table.insert(public_route, {
       node = seg.node,
+      node_ir = seg.node_ir,
       args = util.create_args_table(seg.args),
     })
   end

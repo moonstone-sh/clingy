@@ -23,6 +23,7 @@ local function flatten_declarations(declarations, inherited_flag)
         end
       else
         local copy = util.deep_copy(item)
+        copy._orig_decl = item
         if inherited_flag then
           copy.inherited = true
           copy.visibility = "descendants"
@@ -69,6 +70,7 @@ function M.normalize(config)
 
     local node_binding_ids = {}
     local declaration_order_ids = {}
+    local decl_map = {}
     local ordering_mode = nil
     local ordering_mode_inherited = false
     local short_clusters = false
@@ -108,6 +110,17 @@ function M.normalize(config)
         bindings[binding_id] = binding
         table.insert(node_binding_ids, binding_id)
         table.insert(declaration_order_ids, binding_id)
+
+        decl_map[decl] = binding
+        if decl._orig_decl then
+          decl_map[decl._orig_decl] = binding
+          if decl._orig_decl._inner then
+            decl_map[decl._orig_decl._inner] = binding
+          end
+        end
+        if decl._inner then
+          decl_map[decl._inner] = binding
+        end
 
       elseif decl._tag == "parser_mode" then
         if ordering_mode and ordering_mode ~= decl.mode then
@@ -197,6 +210,7 @@ function M.normalize(config)
       signals = signals,
       stages = stages,
       passthrough_key = passthrough_key,
+      decl_map = decl_map,
       metadata = node_ast.metadata or {},
     }
 
@@ -442,6 +456,7 @@ function M.compile_router(graph)
       signals = node.signals,
       stages = node.stages or {},
       declarations_order = ordered_bindings,
+      decl_map = node.decl_map or {},
       metadata = node.metadata,
     }
 

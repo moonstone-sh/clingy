@@ -28,6 +28,10 @@ local suites = {
   "tests.dsl.dsl_spec",
   "tests.graph.snapshots_spec",
   "tests.properties.parser_properties_spec",
+  "tests.luals.binding_identity_spec",
+  "tests.luals.modular_assembly_spec",
+  "tests.luals.plugin_spec",
+  "tests.integration.standard_schema_decoupling_spec",
   "tests.integration.e2e_cli_spec",
 }
 

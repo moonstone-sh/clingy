@@ -2,12 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
   "runtime": {
     "version": "Lua 5.4",
-    "plugin": "luals/plugin.lua"
+    "plugin": "../../luals/plugin.lua"
   },
   "workspace": {
     "library": [
       ".moonstone/env/share/lua/5.4",
-      "luals/library"
+      "../../luals/library"
     ],
     "checkThirdParty": false,
     "useGitIgnore": false,

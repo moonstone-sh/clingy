@@ -1,0 +1,101 @@
+lockfile_version = 3
+
+[[realization]]
+realization_hash = "b3:9d00185b40021ec3ff5b46a9cf7c3b7b918f3b83ed4aa1d52f1d056088c0a9c6"
+name = "moonstone/lua"
+version = "5.4.9"
+kind = "runtime"
+recipe_hash = "b3:9ddef3514e834e33889eccd8b8526e6aa458749bdf5cd7a9b5063276257c50e4"
+artifact_hash = "b3:39bfa29bd95756b038e2f42deb93e325b9f7f2b80951a5a66a0f1b5639ee50c7"
+replay_mode = "artifact_only"
+runtime = "moonstone/lua"
+lua_abi = "5.4"
+target = "aarch64-macos"
+constellation = "default"
+source_kind = "runtime"
+resolver = "moonstone"
+
+[[realization]]
+realization_hash = "b3:5b7cd9b84bdca914ec95a3dced1b5d4808fe24acfb650bb66e6582d67befbac5"
+name = "moonstone/valua"
+version = "0.2.5"
+kind = "bin"
+source_hash = "b3:eba388556bc8e8801c193a0fb1286eeb78a749e5ebea9ef0d8783d8b5fd8ad6d"
+recipe_hash = "b3:773b4681cf612f070f6ea35dc1bdb40aedfd75ed810a5e15f6483c37b33e3e53"
+artifact_hash = "b3:eba388556bc8e8801c193a0fb1286eeb78a749e5ebea9ef0d8783d8b5fd8ad6d"
+replay_mode = "artifact_only"
+runtime = "5.4"
+lua_abi = "5.4"
+target = "aarch64-macos"
+constellation = "default"
+source = "blobs/b3/eb/a3/eba388556bc8e8801c193a0fb1286eeb78a749e5ebea9ef0d8783d8b5fd8ad6d.tar.gz"
+source_kind = "bin"
+source_payload = "sources/blob.tar.gz"
+resolver = "moonstone"
+registry = "test"
+roles = ["runtime"]
+
+[[realization]]
+realization_hash = "b3:58522a8df5ccf7c1f75a796989a26b303fe96fcf51d6351c9049f438326928a0"
+name = "moonstone/alter"
+version = "0.1.1"
+kind = "lib"
+source_hash = "b3:26d86055abf0730b3a5bcaa342556c6fceb64713fdcc248ee9462b2c7781fe4a"
+recipe_hash = "b3:850df7b60ec8388672f76c7e188c2af208948ae520718571e443dec8d3479e9e"
+artifact_hash = "b3:aab08713fb761266b4cdd63a69b685def9513216360e868fb5dc282d16dce07a"
+replay_mode = "artifact_only"
+runtime = "5.4"
+lua_abi = ""
+target = "aarch64-macos"
+constellation = "default"
+source = "blobs/b3/26/d8/26d86055abf0730b3a5bcaa342556c6fceb64713fdcc248ee9462b2c7781fe4a.tar.gz"
+source_kind = "source"
+source_payload = "sources/blob.tar.gz"
+resolver = "store"
+roles = ["runtime"]
+
+[[realization]]
+realization_hash = "b3:093f40401d2da630d6de15a664f99d4f85b73b837f47ac93ba22a93e45508f10"
+name = "moonstone/alter-jsonc"
+version = "0.1.1"
+kind = "lib"
+source_hash = "b3:f257bec3b1952c4dd65da2bde226d77522a0a652fb8fec93b9b319d0736ee55c"
+recipe_hash = "b3:a5fa64caf23140809c0b664e071c722f1c6b55caf61b7c1f0758ddf1ddaffba2"
+artifact_hash = "b3:f39b44ed3497bd78bb8897b33c67e2f292b9a7f4cde18a85b8926f91564c794e"
+replay_mode = "artifact_only"
+runtime = "5.4"
+lua_abi = ""
+target = "aarch64-macos"
+constellation = "default"
+source = "blobs/b3/f2/57/f257bec3b1952c4dd65da2bde226d77522a0a652fb8fec93b9b319d0736ee55c.tar.gz"
+source_kind = "source"
+source_payload = "sources/blob.tar.gz"
+resolver = "store"
+roles = ["runtime"]
+
+[[realization]]
+realization_hash = "b3:c1fe74948775877c1c33d9e9621d5ec6af6f2cd42adfae88612234b7c881c66c"
+name = "moonstone/alter-json"
+version = "0.1.1"
+kind = "lib"
+source_hash = "b3:f0a9e212d53c80a956daac20fe2d03b947f8dc89d59fb086658682f029de8f93"
+recipe_hash = "b3:b702aec486e89b18ba08c817b41aef5ef3db7493bd386efe51dc4247cd746532"
+artifact_hash = "b3:8e607bd37ed1e3568b2871ae185d8dec28f7c4e5f046517e0c5f40d6ffa86569"
+replay_mode = "artifact_only"
+runtime = "5.4"
+lua_abi = ""
+target = "aarch64-macos"
+constellation = "default"
+source = "blobs/b3/f0/a9/f0a9e212d53c80a956daac20fe2d03b947f8dc89d59fb086658682f029de8f93.tar.gz"
+source_kind = "source"
+source_payload = "sources/blob.tar.gz"
+resolver = "store"
+roles = ["runtime"]
+
+[[profile]]
+id = "aarch64-macos+moonstone/lua+5.4"
+target = "aarch64-macos"
+runtime = "moonstone/lua"
+lua_abi = "5.4"
+packages = [{ name = "moonstone/lua", version = "5.4.9", realization_hash = "b3:9d00185b40021ec3ff5b46a9cf7c3b7b918f3b83ed4aa1d52f1d056088c0a9c6" }, { name = "moonstone/valua", version = "0.2.5", realization_hash = "b3:5b7cd9b84bdca914ec95a3dced1b5d4808fe24acfb650bb66e6582d67befbac5" }, { name = "moonstone/alter", version = "0.1.1", realization_hash = "b3:58522a8df5ccf7c1f75a796989a26b303fe96fcf51d6351c9049f438326928a0" }, { name = "moonstone/alter-jsonc", version = "0.1.1", realization_hash = "b3:093f40401d2da630d6de15a664f99d4f85b73b837f47ac93ba22a93e45508f10" }, { name = "moonstone/alter-json", version = "0.1.1", realization_hash = "b3:c1fe74948775877c1c33d9e9621d5ec6af6f2cd42adfae88612234b7c881c66c" }]
+edges = []

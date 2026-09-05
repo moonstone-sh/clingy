@@ -2,6 +2,35 @@ local util = require("clingy.util")
 
 local M = {}
 
+M.adapters = {}
+
+---Registers a schema adapter.
+---@param adapter_def { vendor?: string, name?: string, match: fun(schema: any): boolean, inspect?: fun(schema: any): table, coerce?: fun(schema: any, token: string): any, lexical?: fun(schema: any, token: string): any }
+function M.register(adapter_def)
+  assert(type(adapter_def) == "table", "schema adapter must be a table")
+  local vendor = adapter_def.vendor or adapter_def.name
+  assert(type(vendor) == "string", "schema adapter must specify vendor or name")
+  assert(type(adapter_def.match) == "function", "schema adapter must specify match function")
+  adapter_def.vendor = vendor
+  table.insert(M.adapters, 1, adapter_def)
+end
+
+---Finds a matching registered schema adapter.
+---@param schema any
+---@return table?
+function M.find_adapter(schema)
+  if not schema or type(schema) ~= "table" then
+    return nil
+  end
+  for _, adapter in ipairs(M.adapters) do
+    local ok, matched = pcall(adapter.match, schema)
+    if ok and matched then
+      return adapter
+    end
+  end
+  return nil
+end
+
 ---Safely requires Valua if available.
 local function get_valua()
   local ok, valua = pcall(require, "valua")
@@ -9,17 +38,10 @@ local function get_valua()
   return nil
 end
 
----Inspects a schema using Valua reflection or Standard Schema v1 metadata.
----Follows base/input schema through pipes, unwraps optional/nullable/annotate wrappers.
----@param schema any
----@return table Info { kind: string, description: string?, default: any?, options: string[]? }
-function M.inspect_schema(schema)
-  if not schema or type(schema) ~= "table" then
-    return { kind = "unknown" }
-  end
-
+---Inspects a Valua schema using Valua reflection.
+local function inspect_valua(schema)
   local valua = get_valua()
-  if valua and schema["~standard"] and valua.reflect then
+  if valua and valua.reflect then
     local ok, ref = pcall(valua.reflect, schema)
     if ok and ref and ref.nodes and ref.root then
       local current = ref.nodes[ref.root]
@@ -118,36 +140,13 @@ function M.inspect_schema(schema)
       }
     end
   end
-
-  -- Fallback: inspect ~standard directly
-  local std = schema["~standard"]
-  if std then
-    return {
-      kind = std.kind or "unknown",
-      description = std.description,
-    }
-  end
-
-  return { kind = "unknown" }
+  return {}
 end
 
----Performs lexical adaptation from a raw string token to the primitive expected by the schema.
----Section 20: Clingy converts lexical representation into the input form expected by Valua.
----@param token string The raw string token from argv.
----@param schema any The schema associated with the argument/option.
----@return any The coerced value.
-function M.coerce(token, schema)
-  if type(token) ~= "string" then
-    return token
-  end
-
-  if not schema then
-    return token
-  end
-
-  local info = M.inspect_schema(schema)
-  local kind = info.kind
-
+---Coerces a string token according to Valua schema.
+local function coerce_valua(schema, token)
+  local info = inspect_valua(schema)
+  local kind = info and info.kind
   if kind == "integer" then
     if token:match("^[+-]?%d+$") then
       local n = tonumber(token)
@@ -156,7 +155,6 @@ function M.coerce(token, schema)
       end
       return n
     end
-    -- If not an integer string, pass string to Valua so Valua issues a type error
     return token
   elseif kind == "number" then
     local n = tonumber(token)
@@ -171,13 +169,65 @@ function M.coerce(token, schema)
     end
     return token
   end
+  return token
+end
 
+---Built-in Valua adapter.
+local valua_adapter = {
+  vendor = "valua",
+  match = function(schema)
+    if type(schema) ~= "table" then return false end
+    local std = schema["~standard"]
+    return std ~= nil and type(std) == "table" and std.vendor == "valua"
+  end,
+  inspect = inspect_valua,
+  coerce = coerce_valua,
+}
+
+-- Register default valua adapter
+M.register(valua_adapter)
+
+---Inspects a schema using registered adapter.
+---Returns empty table {} if no adapter matches (zero duck-typing).
+---@param schema any
+---@return table Info { kind?: string, description?: string, default?: any, options?: string[] }
+function M.inspect_schema(schema)
+  if not schema or type(schema) ~= "table" then
+    return {}
+  end
+  local adapter = M.find_adapter(schema)
+  if adapter and adapter.inspect then
+    return adapter.inspect(schema) or {}
+  end
+  return {}
+end
+
+---Performs lexical adaptation from a raw string token to the primitive expected by the schema.
+---If an adapter matches and provides coerce(), delegates to it.
+---If no adapter matches, returns raw token string untouched.
+---@param token string The raw string token from argv.
+---@param schema any The schema associated with the argument/option.
+---@return any The coerced value or original token.
+function M.coerce(token, schema)
+  if type(token) ~= "string" or not schema then
+    return token
+  end
+  local adapter = M.find_adapter(schema)
+  if adapter then
+    local coerce_fn = adapter.coerce or adapter.lexical
+    if coerce_fn then
+      local ok, res = pcall(coerce_fn, schema, token)
+      if ok and res ~= nil then
+        return res
+      end
+    end
+  end
   return token
 end
 
 ---Validates a coerced value against a schema.
----@param value any Coerced input value.
----@param schema any Valua schema or validator function.
+---@param value any Coerced input value (or raw string token if no adapter matched).
+---@param schema any Schema or validator function.
 ---@param arg_name string Name of the argument/option for error context.
 ---@return boolean ok True if valid.
 ---@return any result Validated/transformed value if ok=true, or list of issues / error message if ok=false.
@@ -194,7 +244,7 @@ function M.validate(value, schema, arg_name)
     return true, res ~= nil and res or value
   end
 
-  local std = schema["~standard"]
+  local std = schema["~standard"] or (type(schema.validate) == "function" and schema)
   if std and type(std.validate) == "function" then
     local res = std.validate(value)
     if res.issues and #res.issues > 0 then

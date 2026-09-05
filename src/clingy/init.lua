@@ -77,6 +77,10 @@ c.lifecycle = require("clingy.lifecycle")
 c.compiler = require("clingy.compiler")
 c.parser = require("clingy.parser")
 c.adapter = require("clingy.adapter")
+c.schema_adapter = c.adapter.register
 c.util = require("clingy.util")
+c.Context = require("clingy.context").Context
+
+c.c = c
 
 return c

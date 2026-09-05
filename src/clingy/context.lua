@@ -22,6 +22,58 @@ function Context.new(opts)
   return self
 end
 
+---Retrieves a typed argument value by its declaration Binding handle or string key.
+---@generic O
+---@param binding clingy.Binding<O>|string
+---@return O?
+function Context:get(binding)
+  if type(binding) == "string" then
+    return self.args[binding]
+  end
+
+  if type(binding) ~= "table" then
+    return nil
+  end
+
+  -- 1. Check target node declaration map
+  if self.target_node and self.target_node.decl_map then
+    local b = self.target_node.decl_map[binding]
+    if b and b.result_key then
+      return self.args[b.result_key]
+    end
+  end
+
+  -- 2. Check active route segments (from target node back up to root)
+  if self.route then
+    for i = #self.route, 1, -1 do
+      local seg = self.route[i]
+      if seg.node_ir and seg.node_ir.decl_map then
+        local b = seg.node_ir.decl_map[binding]
+        if b and b.result_key then
+          return self.args[b.result_key]
+        end
+      end
+    end
+  end
+
+  -- 3. Check entire application graph if accessible
+  if self.app and self.app._graph then
+    local g = self.app._graph.nodes or (self.app._graph.graph and self.app._graph.graph.nodes)
+    if g then
+      for _, n in pairs(g) do
+        if n.decl_map and n.decl_map[binding] then
+          local b = n.decl_map[binding]
+          if b and b.result_key then
+            return self.args[b.result_key]
+          end
+        end
+      end
+    end
+  end
+
+  return nil
+end
+
 ---Creates a structured resource scope with deterministic LIFO defer unwind (Section 30, Invariant 23).
 function Context:scope(fn)
   local scope = scope_mod.create_scope(nil, self)

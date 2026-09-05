@@ -1,6 +1,6 @@
 #!/usr/bin/env lua
--- Add src to package.path
-package.path = "src/?.lua;src/?/init.lua;../valua/src/?.lua;../valua/src/?/init.lua;" .. package.path
+-- Add local Clingy library to search path
+package.path = "../../src/?.lua;../../src/?/init.lua;" .. package.path
 
 local c = require("clingy")
 local v = require("valua")
@@ -38,7 +38,7 @@ local CLI = c.create({
 
                     -- Spawn a managed child process
                     ctx:log("info", "Spawning child process (uname -s)...")
-                    local proc = scope:spawn({
+                    local proc = ctx:spawn({
                         argv = { "uname", "-s" },
                         mode = "capture",
                     })
