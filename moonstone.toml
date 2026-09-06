@@ -21,12 +21,6 @@ name = "moonstone/ballad"
 constraint = "^0.3.5"
 role = "tool"
 
-[[registries]]
-name = "test"
-resolver = "moonstone"
-path = "../test-reg"
-priority = 0
-
 [[dependencies]]
 name = "moonstone/alter"
 constraint = "^0.1.1"
@@ -39,6 +33,5 @@ role = "runtime"
 
 [[dependencies]]
 name = "moonstone/valua"
-constraint = "^0.2.5"
-registry = "test"
+constraint = "^0.2.6"
 role = "runtime"
