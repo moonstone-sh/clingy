@@ -454,20 +454,18 @@ local function parse_node_tree(doc_text)
     end
   end
 
-  -- Determine nesting (parent-child)
-  for i, node in ipairs(nodes) do
-    local best_parent = nil
-    for j, candidate in ipairs(nodes) do
-      if i ~= j and candidate.start_idx < node.start_idx and candidate.end_idx > node.end_idx then
-        if not best_parent or (candidate.start_idx > best_parent.start_idx and candidate.end_idx < best_parent.end_idx) then
-          best_parent = candidate
-        end
-      end
+  -- Determine nesting (parent-child) using monotonic stack
+  local stack = {}
+  for _, node in ipairs(nodes) do
+    while #stack > 0 and stack[#stack].end_idx < node.end_idx do
+      table.remove(stack)
     end
-    node.parent = best_parent
-    if best_parent then
-      table.insert(best_parent.children, node)
+    if #stack > 0 and stack[#stack].start_idx < node.start_idx and stack[#stack].end_idx > node.end_idx then
+      local parent = stack[#stack]
+      node.parent = parent
+      table.insert(parent.children, node)
     end
+    table.insert(stack, node)
   end
 
   -- For each node, extract local declarations masking out child node ranges

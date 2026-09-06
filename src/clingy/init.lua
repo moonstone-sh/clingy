@@ -66,18 +66,37 @@ c.signals = dsl.signals
 c.signal = dsl.signal
 c.stage = dsl.stage
 
--- Submodules
+-- Completion
+c.complete = dsl.complete
+c.values = dsl.values
+c.path = dsl.path
+c.file = dsl.file
+c.directory = dsl.directory
+c.dynamic = dsl.dynamic
+c.none = dsl.none
+
+-- Submodules & Presentation
 c.help = require("clingy.help").format_help
 c.format_version = require("clingy.help").format_version
 c.scope = require("clingy.scope")
 c.process = require("clingy.process")
-c.composer = require("clingy.composer")
+c.presentation = require("clingy.presentation")
+c.composer = setmetatable({}, {
+  __index = require("clingy.presentation.composer"),
+  __call = function(_, opts)
+    return require("clingy.presentation.composer").create_composer(opts)
+  end,
+})
+c.null_host = require("clingy.presentation").create_null_host
+c.recording_host = require("clingy.presentation").create_recording_host
+c.failing_host = require("clingy.presentation").create_failing_host
 c.events = require("clingy.events")
 c.lifecycle = require("clingy.lifecycle")
 c.compiler = require("clingy.compiler")
 c.parser = require("clingy.parser")
 c.adapter = require("clingy.adapter")
 c.schema_adapter = c.adapter.register
+c.completion = require("clingy.completion")
 c.util = require("clingy.util")
 c.Context = require("clingy.context").Context
 

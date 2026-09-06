@@ -14,7 +14,9 @@ function Context.new(opts)
   self.passthrough = opts.passthrough or {}
   self.target_node = opts.target_node
   self.bus = opts.bus
-  self.composer = opts.composer
+  self.presentation = opts.presentation or opts.composer
+  ---@deprecated Use ctx.presentation instead; ctx.composer is a transitional compatibility alias
+  self.composer = self.presentation
   self.app = opts.app
   self._scopes = {}
   self._failed = false
@@ -165,12 +167,34 @@ function Context:fail(msg_or_err, exit_code)
   end
 end
 
----Prompts user for confirmation via Composer ownership (Section 40).
+---Prompts user for confirmation via PresentationHost (Section 40, HOST-INV-11).
 function Context:confirm(prompt, opts)
-  if self.composer then
-    return self.composer:confirm(prompt, opts)
+  opts = opts or {}
+  return self:prompt({
+    type = "confirm",
+    prompt = prompt,
+    default = opts.default ~= nil and opts.default or false,
+    timeout_ms = opts.timeout_ms,
+  })
+end
+
+---Sends an interactive prompt request to the PresentationHost.
+---@param request { type: "confirm"|"text", prompt: string, default?: any, timeout_ms?: integer }
+---@return any
+function Context:prompt(request)
+  request = request or {}
+  if self.presentation and self.presentation.prompt then
+    local ok, res = pcall(function()
+      return self.presentation:prompt(request)
+    end)
+    if ok and res ~= nil then
+      return res
+    elseif not ok then
+      error("Prompt failed in PresentationHost: " .. tostring(res), 2)
+    end
   end
-  return (opts and opts.default ~= nil) and opts.default or false
+  local prompt_mod = require("clingy.presentation.prompt")
+  return prompt_mod.fallback(request)
 end
 
 M.Context = Context

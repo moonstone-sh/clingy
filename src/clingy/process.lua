@@ -169,13 +169,53 @@ function ManagedProcess:wait()
     end
 
   elseif self.mode == "inherit" or self.mode == "interactive" then
-    local ok, exit_type, code = os.execute(self._cmd_line)
-    if ok == true then
-      exit_code = 0
-    elseif type(exit_type) == "number" then
-      exit_code = exit_type
-    elseif type(code) == "number" then
-      exit_code = code
+    local host = self.ctx and self.ctx.presentation
+    if self.mode == "interactive" and host and host.suspend then
+      local ok_suspend, suspend_err = pcall(function()
+        host:suspend({ reason = "subprocess", process = self })
+      end)
+      if not ok_suspend then
+        self.exit_code = 1
+        self:set_state("killed")
+        if self.ctx and self.ctx.bus then
+          self.ctx.bus:emit("diagnostic", {
+            type = "diagnostic",
+            message = "Failed to suspend Presentation Host before interactive subprocess: " .. tostring(suspend_err),
+            exit_code = 1,
+          })
+        end
+        error("Failed to suspend Presentation Host before interactive subprocess: " .. tostring(suspend_err), 2)
+      end
+    end
+
+    local ok, exit_type, code = pcall(function()
+      return os.execute(self._cmd_line)
+    end)
+
+    if self.mode == "interactive" and host and host.resume then
+      local ok_resume, resume_err = pcall(function()
+        host:resume()
+      end)
+      if not ok_resume and self.ctx and self.ctx.bus then
+        self.ctx.bus:emit("diagnostic", {
+          type = "diagnostic",
+          message = "Presentation Host failed to resume after interactive subprocess: " .. tostring(resume_err),
+          level = "error",
+        })
+      end
+    end
+
+    if ok then
+      local exec_ok, t_or_c, maybe_code = exit_type, code, nil
+      if exec_ok == true then
+        exit_code = 0
+      elseif type(exec_ok) == "number" then
+        exit_code = exec_ok
+      elseif type(t_or_c) == "number" then
+        exit_code = t_or_c
+      else
+        exit_code = 1
+      end
     else
       exit_code = 1
     end

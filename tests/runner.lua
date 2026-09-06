@@ -1,5 +1,5 @@
 -- Configure package search paths
-package.path = "./src/?.lua;./src/?/init.lua;./?.lua;./?/init.lua;" .. package.path
+package.path = "./src/?.lua;./src/?/init.lua;./?.lua;./?/init.lua;./.moonstone/env/share/lua/5.4/?.lua;./.moonstone/env/share/lua/5.4/?/init.lua;" .. package.path
 
 local h = require("tests.harness")
 
@@ -33,6 +33,25 @@ local suites = {
   "tests.luals.plugin_spec",
   "tests.integration.standard_schema_decoupling_spec",
   "tests.integration.e2e_cli_spec",
+  "tests.completion.core_completion_spec",
+  "tests.completion.providers_spec",
+  "tests.completion.schema_discovery_spec",
+  "tests.completion.dynamic_context_spec",
+  "tests.completion.backends_spec",
+  "tests.completion.entrypoint_spec",
+  "tests.completion.performance_spec",
+  "tests.presentation.host_lifecycle_spec",
+  "tests.presentation.composer_host_spec",
+  "tests.presentation.custom_host_spec",
+  "tests.presentation.event_ingestion_spec",
+  "tests.presentation.scope_deferral_spec",
+  "tests.presentation.subprocess_handoff_spec",
+  "tests.presentation.signals_handoff_spec",
+  "tests.presentation.prompt_protocol_spec",
+  "tests.presentation.test_hosts_spec",
+  "tests.presentation.error_containment_spec",
+  "tests.presentation.performance_spec",
+  "tests.cli.init_spec",
 }
 
 print("=========================================================")

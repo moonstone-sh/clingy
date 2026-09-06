@@ -49,6 +49,23 @@
 ---@field root table
 ---@field nodes table<string, table>
 
+---@class clingy.PresentationHost
+---@field start? fun(self: clingy.PresentationHost, invocation: { invocation_id: string, app_name: string, version?: string, argv: string[] })
+---@field handle_event fun(self: clingy.PresentationHost, event: table)
+---@field flush? fun(self: clingy.PresentationHost)
+---@field suspend? fun(self: clingy.PresentationHost, reason?: string)
+---@field resume? fun(self: clingy.PresentationHost)
+---@field prompt? fun(self: clingy.PresentationHost, request: { type?: "confirm"|"text", prompt: string, default?: any, timeout_ms?: integer }): any
+---@field finish? fun(self: clingy.PresentationHost, result: { status: "ok"|"failed"|"interrupted"|"terminated", exit_code: integer, error?: any })
+---@field close? fun(self: clingy.PresentationHost)
+
+---@class clingy.ComposerOptions
+---@field mode? "auto"|"fancy"|"plain"|"quiet"|"ndjson"|"json"
+---@field stdout? any
+---@field stderr? any
+---@field is_tty? boolean
+---@field capture? boolean
+
 ---@class clingy.App
 ---@field _graph clingy.CompiledRouter
 ---@field _config table
@@ -70,7 +87,7 @@ function App:parse(argv) end
 
 ---Executes full CLI lifecycle against argv.
 ---@param argv? string[]
----@param opts? { composer_mode?: "auto"|"fancy"|"plain"|"quiet"|"json", stdout?: any, stderr?: any, is_tty?: boolean, capture?: boolean }
+---@param opts? { presentation?: clingy.PresentationHost, composer?: clingy.PresentationHost, composer_mode?: "auto"|"fancy"|"plain"|"quiet"|"ndjson"|"json", stdout?: any, stderr?: any, is_tty?: boolean, capture?: boolean }
 ---@return integer
 function App:run(argv, opts) end
 
@@ -79,6 +96,17 @@ function App:run(argv, opts) end
 ---@param ctx? clingy.Context<any>
 ---@return boolean
 function App:handle_signal(sig, ctx) end
+
+---Executes completion query against the application router.
+---@param req { words?: string[], cword?: integer }|string[]
+---@return clingy.CompletionResponse
+function App:complete(req) end
+
+---Generates shell completion integration script.
+---@param shell "bash"|"zsh"|"fish"|"powershell"
+---@param cmd_path? string
+---@return string
+function App:completion_script(shell, cmd_path) end
 
 ---@class clingy.Scope
 ---@field parent? clingy.Scope
@@ -124,7 +152,8 @@ function ManagedProcess:send_ipc(msg) end
 ---@field passthrough string[] Captured tokens following '--'
 ---@field target_node table Matched compiled command node
 ---@field bus any Semantic event bus
----@field composer any Terminal presentation composer
+---@field presentation clingy.PresentationHost Canonical Presentation Host instance
+---@field composer clingy.PresentationHost @deprecated Use ctx.presentation instead; transitional compatibility alias
 ---@field app clingy.App Enclosing CLI application instance
 local Context = {}
 
@@ -310,5 +339,95 @@ function c.stage(stage_def) end
 ---Registers a custom schema adapter for third-party validation libraries.
 ---@param adapter clingy.SchemaAdapter
 function c.schema_adapter(adapter) end
+
+---@class clingy.CompletionCandidate
+---@field value string
+---@field description? string
+---@field display? string
+---@field directive? integer
+
+---@class clingy.CompletionResponse
+---@field candidates clingy.CompletionCandidate[]
+---@field directive integer
+---@field add fun(self: clingy.CompletionResponse, val_or_table: string|table, description?: string, directive?: integer): clingy.CompletionResponse
+---@field add_directive fun(self: clingy.CompletionResponse, flag: integer): clingy.CompletionResponse
+---@field has_directive fun(self: clingy.CompletionResponse, flag: integer): boolean
+---@field filter_by_prefix fun(self: clingy.CompletionResponse, prefix?: string): clingy.CompletionResponse
+---@field sort fun(self: clingy.CompletionResponse): clingy.CompletionResponse
+
+---@class clingy.CompletionContext
+---@field args table
+---@field prefix string
+---@field route table[]
+---@field target_node? table
+---@field binding? table
+---@field cwd string
+---@field env table<string, string>
+---@field words string[]
+---@field cword integer
+
+---@class clingy.CompletionProvider
+---@field _tag "completion_provider"
+---@field kind "values"|"path"|"file"|"directory"|"dynamic"|"none"
+---@field resolve fun(self: clingy.CompletionProvider, ctx: clingy.CompletionContext): clingy.CompletionResponse
+
+---Attaches a completion provider to a declaration.
+---@generic T
+---@param provider clingy.CompletionProvider
+---@param decl clingy.Binding<T>
+---@return clingy.Binding<T>
+---@overload fun(decl: clingy.Binding<T>, provider: clingy.CompletionProvider): clingy.Binding<T>
+function c.complete(provider, decl) end
+
+---Constructs a static values completion provider.
+---@param ... string|table|string[] List of values or candidate tables
+---@return clingy.CompletionProvider
+function c.values(...) end
+
+---Constructs a generic path completion provider.
+---@param opts? { extensions?: string[], pattern?: string }
+---@return clingy.CompletionProvider
+function c.path(opts) end
+
+---Constructs a file completion provider.
+---@param opts? { extensions?: string[], pattern?: string }
+---@return clingy.CompletionProvider
+function c.file(opts) end
+
+---Constructs a directory completion provider.
+---@param opts? table
+---@return clingy.CompletionProvider
+function c.directory(opts) end
+
+---Constructs a dynamic callback completion provider.
+---@param fn fun(ctx: clingy.CompletionContext): clingy.CompletionResponse|clingy.CompletionCandidate[]|string[]
+---@return clingy.CompletionProvider
+function c.dynamic(fn) end
+
+---Constructs a hard suppression completion provider.
+---@return clingy.CompletionProvider
+function c.none() end
+
+---Presentation host subsystem and constructors.
+c.presentation = {}
+
+---Constructs a default Composer Presentation Host.
+---@param opts? clingy.ComposerOptions
+---@return clingy.PresentationHost
+function c.composer(opts) end
+
+---Constructs a NullHost for silent execution.
+---@return clingy.PresentationHost
+function c.null_host() end
+
+---Constructs a RecordingHost for test inspection.
+---@param opts? { prompt_responses?: (any[]|fun(req: table): any) }
+---@return clingy.PresentationHost
+function c.recording_host(opts) end
+
+---Constructs a FailingHost for fault injection testing.
+---@param opts? { fail_on?: table<string, string> }
+---@return clingy.PresentationHost
+function c.failing_host(opts) end
 
 return c

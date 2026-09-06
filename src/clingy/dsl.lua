@@ -1,5 +1,6 @@
 local util = require("clingy.util")
 local adapter = require("clingy.adapter")
+local providers = require("clingy.completion.providers")
 
 local M = {}
 
@@ -137,9 +138,12 @@ end
 function M.flag(...)
   local args = { ... }
   local names = {}
+  local metadata = nil
   for _, a in ipairs(args) do
     if type(a) == "string" and a:sub(1, 1) == "-" then
       table.insert(names, a)
+    elseif type(a) == "table" and not a._tag then
+      metadata = a
     else
       error(string.format("c.flag names must start with '-', got: %s", tostring(a)))
     end
@@ -160,6 +164,7 @@ function M.flag(...)
     values = { min = 0, max = 0 },
     aggregate = "scalar",
     default = false,
+    metadata = metadata or {},
   }
 end
 
@@ -279,6 +284,44 @@ function M.stage(stage_def)
     stage = stage_def,
   }
 end
+
+---Attaches a completion provider to a declaration (c.arg or c.option).
+---Supports c.complete(provider, decl) and c.complete(decl, provider).
+---@param a table Provider or Declaration
+---@param b table Provider or Declaration
+---@return table Declaration with completion metadata attached
+function M.complete(a, b)
+  local provider = a
+  local decl = b
+  if type(a) == "table" and a._tag == "declaration" then
+    decl = a
+    provider = b
+  end
+
+  if type(decl) ~= "table" or decl._tag ~= "declaration" then
+    error("c.complete must wrap a declaration (c.arg, c.option)")
+  end
+
+  if type(provider) ~= "table" or provider._tag ~= "completion_provider" then
+    error("c.complete requires a valid completion provider (c.values, c.path, c.file, c.directory, c.dynamic, c.none)")
+  end
+
+  local d = util.deep_copy(decl)
+  d._inner = decl
+  d.completion = {
+    origin = provider.kind == "none" and "none" or "explicit",
+    provider = provider,
+  }
+  return d
+end
+
+-- Completion provider constructors
+M.values = providers.values
+M.path = providers.path
+M.file = providers.file
+M.directory = providers.directory
+M.dynamic = providers.dynamic
+M.none = providers.none
 
 ---Registers a schema adapter.
 M.schema_adapter = adapter.register

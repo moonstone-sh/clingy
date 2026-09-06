@@ -1,4 +1,5 @@
 local util = require("clingy.util")
+local discovery = require("clingy.completion.discovery")
 
 local M = {}
 
@@ -86,6 +87,16 @@ function M.normalize(config)
         local binding_id = node_id .. ":" .. (decl.result_key or decl.name or tostring(decl_idx))
         local visibility = decl.inherited and "descendants" or "local"
 
+        local comp_meta = nil
+        if decl.completion then
+          comp_meta = decl.completion
+        elseif decl.schema then
+          local discovered = discovery.discover_provider(decl.schema)
+          if discovered then
+            comp_meta = { origin = "schema", provider = discovered }
+          end
+        end
+
         local binding = {
           id = binding_id,
           owner = node_id,
@@ -96,6 +107,7 @@ function M.normalize(config)
           visibility = visibility,
           position = decl.kind == "arg" and pos_index or nil,
           schema = decl.schema,
+          completion = comp_meta,
           occurrence = decl.occurrence or { min = 0, max = 1 },
           values = decl.values or { min = 1, max = 1 },
           aggregate = decl.aggregate or "scalar",

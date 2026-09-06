@@ -1,104 +1,60 @@
 local c = require("clingy")
 local v = require("valua")
+local init_cmd = require("clingy.cli.init")
 
-local Profile = v.describe(
-  v.picklist({
-    "development",
-    "production",
-    "test",
-  }),
-  "Project profile"
-)
-
-local Define = v.describe(
-  v.string(),
-  "Build-time definition"
-)
-
-local CLI = c.create({
-  name = "meteorite",
+local app
+app = c.create({
+  name = "clingy",
   version = "0.1.0",
+  description = "Deterministic Declarative CLI Engine for Lua",
 
   c.root(c.node({
     c.inherit(
-      c.interspersed(),
-      c.short_clusters(),
-
-      c.flag("-v", "--verbose"),
-      c.flag("-q", "--quiet")
+      c.flag("-h", "--help")
     ),
 
+    c.run(function(ctx)
+      if ctx.args.help then
+        io.stdout:write(app:help() .. "\n")
+        return 0
+      end
+      io.stdout:write(app:help() .. "\n")
+      return 0
+    end),
+
     init = c.node({
-      c.inherit(
-        c.flag("--json")
-      ),
-
-      c.arg("profile", Profile),
-
-      instant = c.node({
-        c.flag("-n", "--now"),
-
-        c.signals({
-          interrupt = function(ctx)
-            return ctx:confirm("Abort initialization?")
-          end,
-
-          terminate = function()
-            return c.signal.shutdown()
-          end,
-        }),
-
-        c.run(function(ctx)
-          ctx:log("info", "Initialized Meteorite project instantly")
-          ctx:result({
-            status = "initialized",
-            profile = ctx.args.profile,
-            instant = ctx.args.now,
-          })
-        end),
-      }, {
-        description = "Instantaneous initialization",
-      }),
-    }, {
-      description = "Initialize a Meteorite project",
-    }),
-
-    build = c.node({
-      c.repeated(
-        c.option("-D", "--define", Define)
-      ),
+      c.option("-c", "--config", v.string()),
+      c.flag("-y", "--yes"),
 
       c.run(function(ctx)
-        ctx:milestone("Build started")
-        ctx:result({
-          status = "built",
-          defines = ctx.args.define or {},
+        if ctx.args.help then
+          io.stdout:write(app:help("init") .. "\n")
+          return 0
+        end
+
+        local res, err = init_cmd.run({
+          config = ctx.args.config,
+          yes = ctx.args.yes,
         })
+        if not res then
+          if err ~= "cancelled" then
+            ctx:log("error", tostring(err and err.message or err))
+            return 1
+          end
+          return 0
+        end
+        if res.changed then
+          ctx:log("info", "Configured LuaLS for Clingy.")
+        else
+          ctx:log("info", "LuaLS is already configured for Clingy.")
+        end
+        return 0
       end),
     }, {
-      description = "Build the Meteorite project",
-    }),
-
-    legacy = c.node({
-      c.ordered(),
-
-      c.flag("--prepare"),
-      c.arg("source", v.string()),
-      c.flag("--commit"),
-      c.arg("destination", v.string()),
-
-      c.run(function(ctx)
-        ctx:result({
-          status = "migrated",
-          source = ctx.args.source,
-          destination = ctx.args.destination,
-        })
-      end),
-    }, {
-      description = "Run legacy migration workflow",
+      description = "Initialize LuaLS IDE plugin configuration in .luarc.json",
     }),
   })),
 })
 
-local exit_code = CLI:run(arg)
+local exit_code = app:run(arg)
 os.exit(exit_code or 0)

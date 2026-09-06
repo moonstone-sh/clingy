@@ -19,6 +19,14 @@ local function deep_equal(a, b)
   return true
 end
 
+function M.contains(tbl, val)
+  if type(tbl) ~= "table" then return false end
+  for _, v in pairs(tbl) do
+    if v == val then return true end
+  end
+  return false
+end
+
 local function table_repr(tbl, depth)
   depth = depth or 0
   if depth > 3 then return "{...}" end

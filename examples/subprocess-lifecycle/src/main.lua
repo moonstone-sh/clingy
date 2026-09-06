@@ -16,10 +16,22 @@ local CLI = c.create({
         ),
 
         worker = c.node({
-            c.option("-t", "--tasks", v.integer()),
+            c.complete(c.values({ "1", "2", "4", "8", "16" }), c.option("-t", "--tasks", v.integer())),
+            c.complete(c.directory(), c.option("-w", "--workdir")),
+
+            -- Dynamic context-aware completion: proposes job names based on parsed --tasks count
+            c.complete(c.dynamic(function(ctx)
+                local count = tonumber(ctx.args.tasks) or 4
+                local jobs = {}
+                for i = 1, count do
+                    table.insert(jobs, string.format("job-%02d", i))
+                end
+                return jobs
+            end), c.arg("job_name", v.optional(v.string()))),
 
             c.run(function(ctx)
-                ctx:log("info", "Starting task execution with managed scope...")
+                ctx:log("info", string.format("Starting task execution with managed scope (tasks=%s, job=%s, workdir=%s)...",
+                    tostring(ctx.args.tasks or 1), tostring(ctx.args.job_name or "default"), tostring(ctx.args.workdir or ".")))
 
                 -- Create a managed resource scope
                 return ctx:scope(function(scope)
@@ -55,6 +67,16 @@ local CLI = c.create({
         }, {
             description = "Run worker tasks within managed scope",
         }),
+
+        -- Subcommand: completion
+        completion = c.node({
+            c.arg("shell", v.picklist({ "bash", "zsh", "fish", "powershell" })),
+
+            c.run(function(ctx)
+                local script = ctx.app:completion_script(ctx.args.shell, "runner")
+                io.write(script, "\n")
+            end),
+        }, { description = "Generate shell completion script for bash, zsh, fish, or powershell" }),
     })),
 })
 

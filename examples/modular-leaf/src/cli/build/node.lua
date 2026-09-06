@@ -8,6 +8,7 @@ return c.node({
     args.target,
     args.release,
     args.defines,
+    args.out_dir,
 
     c.run(run),
 }, {

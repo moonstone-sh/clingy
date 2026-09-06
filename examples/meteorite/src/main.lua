@@ -25,8 +25,15 @@ local CLI = c.create({
 			-- Subtree inheritance: --json is visible to 'init' and its descendants (like 'instant')
 			c.inherit(c.flag("--json")),
 
-			-- Positional argument owned by 'init'
+			-- Positional argument owned by 'init' (schema-derived picklist completion)
 			c.arg("profile", Profile),
+
+			-- Filesystem and static value completion options
+			c.complete(c.directory(), c.option("-d", "--dest", v.string())),
+			c.complete(
+				c.values({ "minimal", "microservice", "full-stack", "api-gateway" }),
+				c.option("-t", "--template")
+			),
 
 			-- 'instant' nested subcommand
 			instant = c.node({
@@ -65,9 +72,14 @@ local CLI = c.create({
 			description = "Initialize a Meteorite project",
 		}),
 
-		-- 'build' subcommand with repeated options
+		-- 'build' subcommand with repeated options and completions
 		build = c.node({
-			c.repeated(c.option("-D", "--define", Define)),
+			c.complete(
+				c.values({ "ENV=development", "ENV=production", "PORT=8080", "DEBUG=true" }),
+				c.repeated(c.option("-D", "--define", Define))
+			),
+			c.complete(c.file({ "*.lua" }), c.option("-c", "--config")),
+			c.complete(c.directory(), c.option("-o", "--output-dir")),
 
 			c.run(function(ctx)
 				ctx:log("info", "Starting build...")
@@ -81,14 +93,14 @@ local CLI = c.create({
 			description = "Compile and build project artifacts",
 		}),
 
-		-- 'legacy' subcommand with strict ordered grammar
+		-- 'legacy' subcommand with strict ordered grammar and path completions
 		legacy = c.node({
 			c.ordered(),
 
 			c.flag("--prepare"),
-			c.arg("source", v.string()),
+			c.complete(c.file(), c.arg("source", v.string())),
 			c.flag("--commit"),
-			c.arg("destination", v.string()),
+			c.complete(c.path(), c.arg("destination", v.string())),
 
 			c.run(function(ctx)
 				ctx:log(
@@ -105,6 +117,18 @@ local CLI = c.create({
 			end),
 		}, {
 			description = "Execute legacy step-ordered pipeline",
+		}),
+
+		-- 'completion' subcommand to generate shell scripts
+		completion = c.node({
+			c.arg("shell", v.picklist({ "bash", "zsh", "fish", "powershell" })),
+
+			c.run(function(ctx)
+				local script = ctx.app:completion_script(ctx.args.shell, "meteorite")
+				io.write(script, "\n")
+			end),
+		}, {
+			description = "Generate shell completion script for bash, zsh, fish, or powershell",
 		}),
 	})),
 })

@@ -49,8 +49,9 @@ function M.dispatch(raw_sig, ctx, target_node, route)
     -- If SIGTERM arrives during active SIGINT confirmation/prompt, cancel prompt and force shutdown immediately
     if norm_sig == "terminate" and ctx._prompt_active then
       ctx._prompt_active = false
-      if ctx.composer and ctx.composer.cancel_prompt then
-        ctx.composer:cancel_prompt()
+      local host = ctx.presentation or ctx.composer
+      if host and host.cancel_prompt then
+        host:cancel_prompt()
       end
       return { action = "force_shutdown", reason = "terminate_during_confirmation" }
     end

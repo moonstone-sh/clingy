@@ -18,12 +18,19 @@ local CLI = c.create({
 
         compile = c.node({
             c.arg("target", v.picklist({ "web", "desktop", "native" })),
-            c.option("-o", "--output", v.string()),
+            c.complete(c.directory(), c.option("-o", "--output", v.string())),
+            c.complete(c.values({
+                { value = "debug", description = "Unoptimized build with debug symbols" },
+                { value = "release", description = "Standard optimized release build" },
+                { value = "release-small", description = "Size-optimized binary" },
+                { value = "release-fast", description = "Aggressive speed-optimized binary" },
+            }), c.option("-p", "--profile")),
+            c.complete(c.none(), c.option("--secret-token")),
 
             c.run(function(ctx)
                 ctx:span("compilation", function()
                     ctx:progress("compile", 10, "Parsing source AST")
-                    ctx:log("info", "Target platform: " .. ctx.args.target)
+                    ctx:log("info", string.format("Target: %s (profile=%s)", ctx.args.target, ctx.args.profile or "debug"))
                     
                     ctx:progress("compile", 45, "Generating code artifacts")
                     ctx:progress("compile", 80, "Optimizing bytecode")
@@ -33,11 +40,22 @@ local CLI = c.create({
                 return {
                     status = "success",
                     target = ctx.args.target,
+                    profile = ctx.args.profile or "debug",
                     artifacts = { "dist/" .. ctx.args.target .. "/bundle.bin" },
                     duration_ms = 42,
                 }
             end),
-        }),
+        }, { description = "Compile target platform with telemetry" }),
+
+        -- Subcommand: completion
+        completion = c.node({
+            c.arg("shell", v.picklist({ "bash", "zsh", "fish", "powershell" })),
+
+            c.run(function(ctx)
+                local script = ctx.app:completion_script(ctx.args.shell, "builder")
+                io.write(script, "\n")
+            end),
+        }, { description = "Generate shell completion script for bash, zsh, fish, or powershell" }),
     })),
 })
 

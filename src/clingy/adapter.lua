@@ -74,6 +74,7 @@ local function inspect_valua(schema)
 
       -- Literal inspection
       if kind == "literal" and current and current.value ~= nil then
+        options = { current.value }
         local vt = type(current.value)
         if vt == "number" then
           kind = (math.tointeger and math.tointeger(current.value)) and "integer" or "number"

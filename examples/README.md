@@ -85,6 +85,47 @@ moon exec lua src/main.lua --json compile desktop -o dist
 
 ---
 
+## Shell Completions
+
+All example projects implement first-class shell completions powered by Clingy's `CompletionEngine`:
+- **Schema-Derived Autocomplete**: Picklists and enums (e.g. `v.picklist({ "development", "production", "test" })`) are discovered automatically.
+- **Filesystem Completions**: Options and positionals use `c.complete(c.directory(), ...)` or `c.complete(c.file(), ...)` delegating natively to host shells.
+- **Dynamic Context Inspection**: In `subprocess-lifecycle`, worker task names adapt dynamically to preceding `--tasks` arguments (`runner worker --tasks 4 <TAB>` &rarr; `job-01..job-04`).
+- **Structured Descriptions**: In `json-stream-events`, `--profile` options provide rich candidate descriptions formatted natively for Zsh, Fish, and PowerShell.
+
+### Generating & Installing Completions
+
+Each example includes a built-in `completion` command generating thin, lightning-fast integration shims for **Bash**, **Zsh**, **Fish**, and **PowerShell**:
+
+```bash
+# 1. Meteorite
+moon exec lua src/main.lua completion zsh > ~/.zsh/completion/_meteorite
+moon exec lua src/main.lua completion bash > ~/.local/share/bash-completion/completions/meteorite
+moon exec lua src/main.lua completion fish > ~/.config/fish/completions/meteorite.fish
+moon exec lua src/main.lua completion powershell > "$HOME/.meteorite.ps1"
+
+# 2. Dynamic evaluation directly in your active shell:
+eval "$(moon exec lua examples/meteorite/src/main.lua completion zsh)"
+eval "$(moon exec lua examples/modular-leaf/src/main.lua completion bash)"
+```
+
+### Testing Completions from the CLI
+
+You can query the hidden machine completion endpoint directly from your terminal:
+
+```bash
+# Propose subcommands at root:
+moon exec lua src/main.lua --__clingy-complete zsh meteorite "" --cword 2
+
+# Propose schema-derived picklist choices for 'init':
+moon exec lua src/main.lua --__clingy-complete zsh meteorite init "" --cword 3
+
+# Propose dynamic context-aware job names based on '--tasks 3':
+moon exec lua examples/subprocess-lifecycle/src/main.lua --__clingy-complete zsh runner worker --tasks 3 "" --cword 5
+```
+
+---
+
 ## Neovim & LuaLS Integration
 
 Each example project contains a `.luarc.json` configured with:
@@ -106,3 +147,4 @@ When opened in Neovim:
 1. **Live `ctx.args` Autocomplete**: Typing `ctx.args.` inside `c.run(function(ctx) ... end)` presents autocomplete for all declared args, flags, and options with exact Valua output types.
 2. **First-Class `Binding<O>` Handles**: Local declaration variables (`local dir = c.arg(...)`) provide full hover type info and typed returns on `ctx:get(dir)`.
 3. **Zero Configuration**: No code generation or pre-compilation is required.
+
