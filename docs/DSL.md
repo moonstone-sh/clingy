@@ -87,23 +87,107 @@ c.node({
 
 ---
 
-### 2.3 Declarations: Flags, Options, Arguments, Passthrough
+### 2.3 Declarations: Flags, Options, Arguments, Composed Tokens, Passthrough
 
-#### `c.flag(short_or_long, ...)`
+#### `c.flag(result_key?, short_or_long, ...)`
 Declares a boolean flag. Flags consume 0 values (`values = { min = 0, max = 0 }`) and default to `false`.
 ```lua
 c.flag("-v", "--verbose")
 c.flag("--json")
 c.flag("-f")
+
+-- Explicit result key; ctx.args.dry_run is independent of the aliases.
+c.flag("dry_run", "--dry-run", "-n")
 ```
 
-#### `c.option(short_or_long, ..., schema?, opts?)`
+#### `c.option(result_key?, short_or_long, ..., schema?)`
 Declares an option that consumes 1 string value from argv and adapts/validates it.
 ```lua
 c.option("-c", "--config", v.string())
 c.option("-p", "--port", v.integer())
-c.option("-e", "--env", v.picklist({ "dev", "prod" }), { default = "dev" })
+
+-- Explicit result key; the schema remains the final non-name argument.
+c.option("config_file", "--config", "-c", v.string())
 ```
+
+The canonical explicit form puts the result key first, followed by aliases and
+at most one final schema. Aliases continue to be strings beginning with `-`.
+Alias-only declarations retain their legacy schema placement, including a
+schema before aliases, and continue to derive their result key from the longest
+long alias.
+
+#### `c.label(name, declaration)`
+Assigns the handler-facing key compositionally. It may wrap one `c.arg`,
+`c.option`, or `c.flag` exactly once. Labels must contain non-whitespace text.
+
+```lua
+local output = c.label("output", c.option("--output", "-o", v.string()))
+local verbose = c.label("verbose", c.flag("--verbose", "-v"))
+-- ctx:get(output), ctx.args.output, and ctx.args.verbose
+```
+
+#### `c.separator(separators, option, opts?)`
+Controls the value spellings accepted by an option. `" "` means the following
+argv token; punctuation is attached to the option spelling. `""` means an
+adjacent value, such as `-Dname=value`; it is valid only for value-taking
+options. Attached values are trimmed by default (including spaces/newlines);
+use `{ trim = false }` to keep the exact substring.
+
+```lua
+c.separator({ "=", ":", " " }, c.option("--format", v.string()))
+-- --format=json, --format:json, and --format json
+```
+
+#### `c.compose(...)`: one token, multiple typed fields
+`c.compose` declares one required positional argv token whose **entire** text
+must satisfy a fixed sequence of labelled captures, exact literals, and
+separators. It is intentionally a node-local positional declaration, not a
+global `:`/`=` splitting rule.
+
+```lua
+c.node({
+  c.compose(
+    c.label("environment", c.capture(v.string())),
+    c.separator(":"),
+    c.literal("database"),
+    c.separator("="),
+    c.label("database", c.capture(v.boolean()))
+  ),
+  c.run(function(ctx)
+    -- run dev:database=true
+    assert(ctx.args.environment == "dev")
+    assert(ctx.args.database == true)
+  end),
+})
+```
+
+`c.capture(schema)` supplies the same lexical adaptation and Standard Schema
+validation used by `c.arg` and `c.option`; every capture must be wrapped once
+by `c.label(name, ...)`. `c.literal(text)` is exact. In this form,
+`c.separator(text, opts?)` is a pattern fragment (the existing
+`c.separator(separators, option, opts?)` option wrapper is unchanged).
+Separators consume surrounding spaces and newlines by default. Use
+`c.separator(":", { trim = false })` to preserve that whitespace as part of
+an adjacent capture.
+
+Patterns are anchored to the full argv token. To make boundaries explicit,
+two captures may not be adjacent: put a non-empty literal or separator between
+them. Compilation rejects empty/duplicate labels, unlabelled captures,
+adjacent-capture ambiguity, output-key collisions, and `c.inherit(c.compose(...))`.
+Composed tokens are fixed one-token positionals, so cardinality wrappers and
+capture-level completions are intentionally unsupported; shell completion
+suppresses candidates while the token is in focus.
+
+#### `c.tail(name, terminator, { c.forward(mode) })`
+Ends Clingy's grammar at a declared marker and forwards the remaining argv
+tokens into `ctx.args[name]`. `trimmed` excludes the terminator; `complete`
+includes it.
+
+```lua
+c.tail("forwarded", "--", { c.forward("trimmed") })
+```
+
+`c["end"](...)` remains available as a deprecated compatibility alias.
 
 #### `c.arg(name, schema?, opts?)`
 Declares a positional CLI argument.
@@ -162,7 +246,7 @@ Enables POSIX single-dash flag clustering (e.g. `-xvf` expands to `-x -v -f`). N
 Attaches an execution handler to the command node:
 ```lua
 c.run(function(ctx)
-  ctx.composer:log("info", "Starting application in " .. ctx.args.env)
+   ctx.presentation:log("info", "Starting application in " .. ctx.args.env)
   return 0
 end)
 ```
@@ -172,10 +256,10 @@ Declares signal handling callbacks for the node:
 ```lua
 c.signals({
   interrupt = function(ctx)
-    ctx.composer:log("warn", "SIGINT received! Aborting gracefully...")
+     ctx.presentation:log("warn", "SIGINT received! Aborting gracefully...")
   end,
   terminate = function(ctx)
-    ctx.composer:log("warn", "SIGTERM received! Shutting down...")
+     ctx.presentation:log("warn", "SIGTERM received! Shutting down...")
   end,
 })
 ```

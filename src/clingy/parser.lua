@@ -1,5 +1,7 @@
 local util = require("clingy.util")
 local adapter = require("clingy.adapter")
+local named = require("clingy.named")
+local composed = require("clingy.composed")
 
 local M = {}
 
@@ -49,17 +51,43 @@ function M.parse(graph, argv)
 
   local passthrough_tokens = {}
   local passthrough_active = false
+  local end_capture = nil
   local options_closed = false
 
   local i = 1
+
+  local function adapt_define_field(raw, field, prefix)
+    local ok, value_or_issues = adapter.adapt_and_validate(raw, field.schema, field.label)
+    if not ok then
+      local msg = string.format("Validation failed for definition '%s' field '%s': ", prefix, field.label)
+      if type(value_or_issues) == "table" and value_or_issues[1] then
+        msg = msg .. util.format_issue(value_or_issues[1])
+      else
+        msg = msg .. tostring(value_or_issues)
+      end
+      error(msg)
+    end
+    return value_or_issues
+  end
+
   while i <= #argv do
     local token = argv[i]
 
-    if passthrough_active then
-      table.insert(passthrough_tokens, token)
+    if end_capture then
+      table.insert(end_capture.tokens, token)
+      i = i + 1
+    elseif current_node.end_capture and not current_node.end_capture.legacy_passthrough
+        and token == current_node.end_capture.terminator then
+      local policy = current_node.end_capture
+      local capture = { policy = policy, tokens = {} }
+      if policy.forward == "complete" then
+        table.insert(capture.tokens, token)
+      end
+      end_capture = capture
       i = i + 1
     elseif token == "--" then
-      -- Invariant 14: '--' terminates option and subcommand recognition
+      -- Legacy passthrough retains its historical delayed capture behavior so
+      -- required positionals after the delimiter can still be satisfied.
       options_closed = true
       i = i + 1
       local has_unmet_pos = false
@@ -72,7 +100,10 @@ function M.parse(graph, argv)
         end
       end
       if not has_unmet_pos then
-        passthrough_active = true
+        if current_node.end_capture and current_node.end_capture.legacy_passthrough then
+          passthrough_active = true
+          end_capture = { policy = current_node.end_capture, tokens = passthrough_tokens }
+        end
       end
     else
       local seg_pos_consumed = positionals_consumed[active_segment] or 0
@@ -94,17 +125,18 @@ function M.parse(graph, argv)
       -- In leading mode, once positional consumption begins, option recognition stops
       if is_leading and seg_pos_consumed > 0 and not options_closed then
         -- Section 1: Check if token exactly matches a visible named declaration or cluster
-        local opt_name = token
-        local eq_pos = token:find("=")
-        if eq_pos then
-          opt_name = token:sub(1, eq_pos - 1)
+        local define_match = named.match_define(token, current_node.defines)
+        if define_match then
+          error(string.format("Misplaced definition '%s' for command '%s'; leading-mode definition parsing ended after positional consumption began",
+            token, current_node.name))
         end
+        local opt_name, _, attached_separator_pos = named.split_attached_value(token, current_node.visible_options_by_name)
 
         if current_node.visible_options_by_name[opt_name] then
           error(string.format("Misplaced option error: '%s' is a valid option for command '%s', but leading-mode option parsing ended after positional consumption began", token, current_node.name))
         end
 
-        if current_node.short_clusters and token:match("^%-[a-zA-Z0-9]+$") and not eq_pos and not token:match("^%-%-") then
+        if current_node.short_clusters and token:match("^%-[a-zA-Z0-9]+$") and not attached_separator_pos and not token:match("^%-%-") then
           local all_flags = true
           for ch_idx = 2, #token do
             local short_name = "-" .. token:sub(ch_idx, ch_idx)
@@ -124,14 +156,75 @@ function M.parse(graph, argv)
       end
 
       if is_option_like then
-        -- Handle option with attached value: --opt=val
-        local opt_name = token
-        local attached_val = nil
-        local eq_pos = token:find("=")
-        if eq_pos then
-          opt_name = token:sub(1, eq_pos - 1)
-          attached_val = token:sub(eq_pos + 1)
-        end
+        -- Definition records claim their exact literal prefix before generic
+        -- option lookup or short-cluster expansion. This makes -Dname=VALUE
+        -- one grammar unit rather than a cluster beginning with -D.
+        local define_match = named.match_define(token, current_node.defines)
+        if define_match then
+          local decl = define_match.binding
+          local pattern = decl.define_pattern
+          if define_match.error then
+            error(string.format("Definition '%s' %s", pattern.prefix, define_match.error))
+          end
+
+          if current_node.mode == "ordered" then
+            local ord_cur = ordered_cursor[active_segment] or 1
+            local matched_ord_idx = nil
+            for d_idx = ord_cur, #(current_node.declarations_order or {}) do
+              local candidate = current_node.declarations_order[d_idx]
+              if candidate == decl then
+                matched_ord_idx = d_idx
+                break
+              elseif candidate.occurrence and candidate.occurrence.min and candidate.occurrence.min > 0 then
+                local cnt = occurrence_counts[candidate] or 0
+                if cnt < candidate.occurrence.min then
+                  error(string.format("Ordered grammar error: expected '%s' before '%s' on command '%s'",
+                    candidate.names and candidate.names[1] or candidate.name or candidate.result_key,
+                    token, current_node.name))
+                end
+              end
+            end
+            if not matched_ord_idx then
+              error(string.format("Ordered grammar error: definition '%s' appeared out of order on command '%s'",
+                token, current_node.name))
+            end
+            ordered_cursor[active_segment] = matched_ord_idx
+          end
+
+          local raw_value = define_match.value
+          if raw_value == nil then
+            i = i + 1
+            if i > #argv or argv[i] == "--" then
+              error(string.format("Definition '%s%s' requires a value", pattern.prefix, define_match.name))
+            end
+            raw_value = argv[i]
+          end
+
+          -- An empty argv element is not a definition value: a record always
+          -- has both fields, independently of the capture schema's domain.
+          if raw_value == "" then
+            error(string.format("Definition '%s%s' requires a value", pattern.prefix, define_match.name))
+          end
+          local record = {
+            [pattern.name.label] = adapt_define_field(define_match.name, pattern.name, pattern.prefix),
+            [pattern.value.label] = adapt_define_field(raw_value, pattern.value, pattern.prefix),
+          }
+          occurrence_counts[decl] = (occurrence_counts[decl] or 0) + 1
+          if not collected_values[decl] then
+            collected_values[decl] = {}
+          end
+          table.insert(collected_values[decl], record)
+          local owner_seg = (decl.owner and route_segment_by_name[decl.owner]) or active_segment
+          if decl.aggregate == "array" then
+            owner_seg.args[decl.result_key] = collected_values[decl]
+          else
+            owner_seg.args[decl.result_key] = record
+          end
+          i = i + 1
+
+        else
+        -- Handle attached values in either --opt=value or --opt:value form.
+        local opt_name, attached_val, attached_separator_pos = named.split_attached_value(token, current_node.visible_options_by_name)
 
         local decl = current_node.visible_options_by_name[opt_name]
 
@@ -177,14 +270,17 @@ function M.parse(graph, argv)
           elseif decl.kind == "option" then
             local raw_val
             if attached_val ~= nil then
-              raw_val = attached_val
+              raw_val = named.normalize_attached_value(attached_val, decl)
               i = i + 1
             else
+              if not decl.separator_policy or not decl.separator_policy.detached then
+                error(string.format("Option '%s' does not accept a detached value", opt_name))
+              end
               i = i + 1
               if i > #argv or argv[i] == "--" then
                 error(string.format("Option '%s' requires a value", opt_name))
               end
-              raw_val = argv[i]
+              raw_val = named.normalize_attached_value(argv[i], decl)
               i = i + 1
             end
 
@@ -217,7 +313,7 @@ function M.parse(graph, argv)
         else
           -- Section 3: Check short flag clusters with transactional atomicity
           local is_cluster = false
-          if current_node.short_clusters and token:match("^%-[a-zA-Z0-9]+$") and not token:match("^%-%-") and not eq_pos then
+          if current_node.short_clusters and token:match("^%-[a-zA-Z0-9]+$") and not token:match("^%-%-") and not attached_separator_pos then
             -- Phase 1: Inspect and validate all cluster characters
             local all_flags = true
             local cluster_decls = {}
@@ -249,6 +345,7 @@ function M.parse(graph, argv)
           if not is_cluster then
             error(string.format("Unknown option or flag '%s' for command '%s'", token, current_node.name))
           end
+        end
         end
 
       else
@@ -327,28 +424,59 @@ function M.parse(graph, argv)
             ordered_cursor[active_segment] = matched_ord_idx
           end
 
-          -- Lexical adaptation & validation
-          local ok, val_or_issues = adapter.adapt_and_validate(token, matched_arg.schema, matched_arg.result_key)
-          if not ok then
-            local msg = "Validation failed for argument '" .. matched_arg.name .. "': "
-            if type(val_or_issues) == "table" and val_or_issues[1] then
-              msg = msg .. util.format_issue(val_or_issues[1])
-            else
-              msg = msg .. tostring(val_or_issues)
+          if matched_arg.kind == "compose" then
+            local raw_captures = composed.match(token, matched_arg.composed_pattern)
+            if not raw_captures then
+              error(string.format("Composed argument '%s' does not match fixed pattern '%s'",
+                token, matched_arg.composed_pattern.display))
             end
-            error(msg)
-          end
 
-          occurrence_counts[matched_arg] = (occurrence_counts[matched_arg] or 0) + 1
-          if not collected_values[matched_arg] then
-            collected_values[matched_arg] = {}
-          end
-          table.insert(collected_values[matched_arg], val_or_issues)
+            local validated_captures = {}
+            for _, item in ipairs(matched_arg.composed_pattern.items) do
+              if item._tag == "capture" then
+                local ok, val_or_issues = adapter.adapt_and_validate(raw_captures[item.label], item.schema, item.label)
+                if not ok then
+                  local msg = "Validation failed for composed capture '" .. item.label .. "': "
+                  if type(val_or_issues) == "table" and val_or_issues[1] then
+                    msg = msg .. util.format_issue(val_or_issues[1])
+                  else
+                    msg = msg .. tostring(val_or_issues)
+                  end
+                  error(msg)
+                end
+                validated_captures[item.label] = val_or_issues
+              end
+            end
 
-          if matched_arg.aggregate == "array" then
-            active_segment.args[matched_arg.result_key] = collected_values[matched_arg]
+            occurrence_counts[matched_arg] = (occurrence_counts[matched_arg] or 0) + 1
+            collected_values[matched_arg] = { token }
+            for label, value in pairs(validated_captures) do
+              active_segment.args[label] = value
+            end
           else
-            active_segment.args[matched_arg.result_key] = val_or_issues
+            -- Lexical adaptation & validation
+            local ok, val_or_issues = adapter.adapt_and_validate(token, matched_arg.schema, matched_arg.result_key)
+            if not ok then
+              local msg = "Validation failed for argument '" .. matched_arg.name .. "': "
+              if type(val_or_issues) == "table" and val_or_issues[1] then
+                msg = msg .. util.format_issue(val_or_issues[1])
+              else
+                msg = msg .. tostring(val_or_issues)
+              end
+              error(msg)
+            end
+
+            occurrence_counts[matched_arg] = (occurrence_counts[matched_arg] or 0) + 1
+            if not collected_values[matched_arg] then
+              collected_values[matched_arg] = {}
+            end
+            table.insert(collected_values[matched_arg], val_or_issues)
+
+            if matched_arg.aggregate == "array" then
+              active_segment.args[matched_arg.result_key] = collected_values[matched_arg]
+            else
+              active_segment.args[matched_arg.result_key] = val_or_issues
+            end
           end
 
           positionals_consumed[active_segment] = (positionals_consumed[active_segment] or 0) + 1
@@ -372,7 +500,10 @@ function M.parse(graph, argv)
               end
             end
             if not has_unmet_pos then
-              passthrough_active = true
+              if current_node.end_capture and current_node.end_capture.legacy_passthrough then
+                passthrough_active = true
+                end_capture = { policy = current_node.end_capture, tokens = passthrough_tokens }
+              end
             end
           end
 
@@ -380,6 +511,11 @@ function M.parse(graph, argv)
         end
       end
     end
+  end
+
+  if end_capture and end_capture.policy and end_capture.policy.binding then
+    local owner_seg = route_segment_by_name[end_capture.policy.binding.owner] or active_segment
+    owner_seg.args[end_capture.policy.binding.result_key] = end_capture.tokens
   end
 
   -- Handle passthrough tokens (Section 23, Invariant 15)
@@ -394,11 +530,12 @@ function M.parse(graph, argv)
     local node_ir = seg.node_ir
 
     -- Check required positionals
-    for _, arg in ipairs(node_ir.args) do
+      for _, arg in ipairs(node_ir.args) do
       local cnt = occurrence_counts[arg] or 0
       local min = arg.occurrence.min or 1
-      if cnt < min then
-        error(string.format("Missing required argument '%s' for command '%s'", arg.name, seg.node))
+        if cnt < min then
+          local name = arg.name or (arg.composed_pattern and arg.composed_pattern.display) or arg.result_key
+          error(string.format("Missing required argument '%s' for command '%s'", name, seg.node))
       end
     end
 

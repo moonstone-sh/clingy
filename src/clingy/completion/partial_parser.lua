@@ -6,6 +6,8 @@
 local response = require("clingy.completion.response")
 local context_mod = require("clingy.completion.context")
 local discovery = require("clingy.completion.discovery")
+local named = require("clingy.named")
+local composed = require("clingy.composed")
 
 local M = {}
 
@@ -53,6 +55,7 @@ function M.parse_partial(router, words, cword)
   local ordered_cursor = 1
   local in_passthrough = false
   local waiting_option = nil
+  local waiting_define = nil
 
   local function update_ordered_cursor(node, binding)
     if node.mode == "ordered" and node.declarations_order then
@@ -71,8 +74,16 @@ function M.parse_partial(router, words, cword)
     if token then
       if in_passthrough then
         -- In passthrough mode, just consume
-      elseif token == "--" then
+      elseif current_node.end_capture and token == current_node.end_capture.terminator then
         in_passthrough = true
+      elseif token == "--" then
+        if current_node.end_capture and current_node.end_capture.legacy_passthrough then
+          in_passthrough = true
+        end
+      elseif waiting_define then
+        -- Definition values have a two-field record grammar, but completion
+        -- intentionally does not speculate inside either field.
+        waiting_define = nil
       elseif waiting_option then
         -- Previous option consumed this token as its value
         parsed_args[waiting_option.binding.result_key] = token
@@ -81,31 +92,48 @@ function M.parse_partial(router, words, cword)
         update_ordered_cursor(current_node, waiting_option.binding)
         waiting_option = nil
       elseif token:sub(1, 1) == "-" then
-        -- Check for inline option=value: --opt=val or -o=val
-        local opt_name, opt_val = token:match("^(%-%-[%w_%-]+)=(.*)$")
-        if not opt_name then
-          opt_name, opt_val = token:match("^(%-[%w_%-]+)=(.*)$")
-        end
+        -- Definition prefixes have runtime precedence over regular options and
+        -- short clusters. Track detached values so they cannot become fake
+        -- positionals while completing later words.
+        local define_match = named.match_define(token, current_node.defines)
+        if define_match and not define_match.error then
+          local b = define_match.binding
+          if define_match.value == nil then
+            waiting_define = b
+          else
+            local records = parsed_args[b.result_key] or {}
+            table.insert(records, {
+              [b.define_pattern.name.label] = define_match.name,
+              [b.define_pattern.value.label] = define_match.value,
+            })
+            parsed_args[b.result_key] = records
+            option_counts[b.result_key] = (option_counts[b.result_key] or 0) + 1
+            update_ordered_cursor(current_node, b)
+          end
+        else
+        -- Match runtime's exact-alias precedence and '=' / ':' attachments.
+        local bindings = current_node.visible_options_by_name
+        local opt_name, opt_val, separator_pos = named.split_attached_value(token, bindings)
+        local b = bindings and bindings[opt_name]
 
-        if opt_name then
-          local b = current_node.visible_options_by_name and current_node.visible_options_by_name[opt_name]
-          if b then
+        if separator_pos then
+          if b and b.kind == "option" then
             parsed_args[b.result_key] = opt_val
             option_counts[b.result_key] = (option_counts[b.result_key] or 0) + 1
             update_ordered_cursor(current_node, b)
           end
         else
           -- Standalone flag or option
-          local b = current_node.visible_options_by_name and current_node.visible_options_by_name[token]
           if b then
             if b.kind == "option" then
-              waiting_option = { binding = b, opt_name = token }
+              waiting_option = { binding = b, opt_name = opt_name }
             elseif b.kind == "flag" then
               parsed_args[b.result_key] = true
               option_counts[b.result_key] = (option_counts[b.result_key] or 0) + 1
               update_ordered_cursor(current_node, b)
             end
           end
+        end
         end
       else
         -- Token does not start with '-': check subcommand transition
@@ -125,7 +153,19 @@ function M.parse_partial(router, words, cword)
           consumed_positionals = consumed_positionals + 1
           local pos_binding = current_node.args and current_node.args[consumed_positionals]
           if pos_binding then
-            parsed_args[pos_binding.result_key] = token
+            if pos_binding.kind == "compose" then
+              -- Composed tokens deliberately have no synthetic result key.
+              -- Retain their raw labelled fields for downstream dynamic
+              -- completion while leaving schema validation to the real parser.
+              local raw_captures = composed.match(token, pos_binding.composed_pattern)
+              if raw_captures then
+                for label, value in pairs(raw_captures) do
+                  parsed_args[label] = value
+                end
+              end
+            else
+              parsed_args[pos_binding.result_key] = token
+            end
             update_ordered_cursor(current_node, pos_binding)
           end
         end
@@ -138,9 +178,14 @@ function M.parse_partial(router, words, cword)
   local focus = nil
   local target_binding = nil
   local inline_opt_name = nil
+  local inline_separator = nil
   local prefix = current_word
 
   if in_passthrough then
+    focus = M.FOCUS.PASSTHROUGH
+  elseif waiting_define then
+    -- A record capture may have arbitrary schemas and separators. Do not emit
+    -- guesses that could leave the required value missing or malformed.
     focus = M.FOCUS.PASSTHROUGH
   elseif waiting_option then
     focus = M.FOCUS.OPTION_VALUE
@@ -151,18 +196,21 @@ function M.parse_partial(router, words, cword)
       -- In leading mode, options cannot appear after positional argument!
       focus = M.FOCUS.PASSTHROUGH
     else
-      -- Check inline --opt=val
-      local opt_name, opt_val = current_word:match("^(%-%-[%w_%-]+)=(.*)$")
-      if not opt_name then
-        opt_name, opt_val = current_word:match("^(%-[%w_%-]+)=(.*)$")
-      end
+      -- Match runtime's exact-alias precedence and '=' / ':' attachments.
+      local define_match = named.match_define(current_word, current_node.defines)
+      if define_match then
+        focus = M.FOCUS.PASSTHROUGH
+      else
+      local bindings = current_node.visible_options_by_name
+      local opt_name, opt_val, separator_pos, separator = named.split_attached_value(current_word, bindings)
+      local b = bindings and bindings[opt_name]
 
-      if opt_name then
-        local b = current_node.visible_options_by_name and current_node.visible_options_by_name[opt_name]
+      if separator_pos then
         if b and b.kind == "option" then
           focus = M.FOCUS.OPTION_VALUE
           target_binding = b
           inline_opt_name = opt_name
+          inline_separator = separator
           prefix = opt_val
         else
           focus = M.FOCUS.OPTION_NAME
@@ -171,6 +219,7 @@ function M.parse_partial(router, words, cword)
       else
         focus = M.FOCUS.OPTION_NAME
         prefix = current_word
+      end
       end
     end
   else
@@ -211,6 +260,7 @@ function M.parse_partial(router, words, cword)
     focus = focus,
     target_binding = target_binding,
     inline_opt_name = inline_opt_name,
+    inline_separator = inline_separator,
     prefix = prefix,
     words = words,
     cword = cword,
@@ -293,17 +343,34 @@ function M.resolve_candidates(parse_result)
         end
       end
     end
+    -- A bare definition prefix is useful to start a record, but once its
+    -- prefix is present we deliberately avoid completing inside the grammar.
+    for _, b in ipairs(node.defines or {}) do
+      local define_prefix = b.define_pattern and b.define_pattern.prefix
+      if define_prefix and define_prefix:sub(1, #prefix) == prefix then
+        resp:add(define_prefix, "definition record")
+      end
+    end
+    if node.end_capture and node.end_capture.terminator
+        and node.end_capture.terminator:sub(1, #prefix) == prefix then
+      resp:add(node.end_capture.terminator, "end capture")
+    end
     resp:sort()
     return resp
   end
 
   if focus == M.FOCUS.OPTION_VALUE then
+    if not parse_result.inline_opt_name and parse_result.target_binding
+        and parse_result.target_binding.separator_policy
+        and not parse_result.target_binding.separator_policy.detached then
+      return resp
+    end
     local provider = discovery.resolve_binding_completion(parse_result.target_binding)
     if provider then
       local p_resp = provider:resolve(ctx)
       if parse_result.inline_opt_name then
-        -- Prepend --opt= to candidates
-        local inline_prefix = parse_result.inline_opt_name .. "="
+        -- Preserve the user's attached-value separator in candidates.
+        local inline_prefix = parse_result.inline_opt_name .. (parse_result.inline_separator or "=")
         for _, cand in ipairs(p_resp.candidates) do
           cand.value = inline_prefix .. cand.value
           resp:add(cand)

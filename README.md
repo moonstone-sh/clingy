@@ -53,6 +53,88 @@ local app = c.create({
 app:run(arg)
 ```
 
+Named declarations may use a stable result key independent of their CLI
+spellings: `c.option("greeting", "--greeting", "-g", v.string())` and
+`c.flag("dry_run", "--dry-run", "-n")`. Alias-only declarations remain
+supported and derive their keys as before. Options accept `--name=value`,
+`--name:value`, and detached values.
+
+### Compiler-style defines
+
+`c.define` models compiler definitions as records rather than opaque option
+strings. Its prefix and name are adjacent; the declared separator selects an
+inline or next-token value.
+
+```lua
+c.label("defines", c.repeated(c.define("-D", {
+  c.label("name", c.capture(v.string())),
+  c.separator({ "=", " ", "-" }),
+  c.label("value", c.capture(v.string())),
+})))
+-- accepts: -Doptimize=releasefast  -Doptimize releasefast  -Doptimize-releasefast
+-- ctx.args.defines == { { name = "optimize", value = "releasefast" }, ... }
+```
+
+Every definition must contain both fields, and repeated definitions retain
+their command-line order and duplicates.
+
+The lower-level empty-separator option form remains available when an opaque
+adjacent option value is the intended API:
+
+An empty separator declares a value adjacent to a value-taking option. Combine
+it with the detached separator to accept conventional compiler defines:
+
+```lua
+c.label("defines", c.repeated(
+  c.separator({ "", " " }, c.option("-D", v.string()))
+))
+-- accepts: -Doptimize  -Dtarget=release  -D debug=true
+```
+
+Empty separators apply only to `c.option` declarations. A bare `-D` still
+expects its detached value; it is not an empty define.
+
+### Base-aware calculator example
+
+The [`calculator`](examples/calculator/) example returns both representations
+of an integer result. For example, `--json -Dbase=8 add 7 1` reports
+the following result data:
+
+```json
+{"operation":"add","left":7,"right":1,"base":8,"result":"10","result_decimal":8}
+```
+
+Division rejects non-integral results.
+
+### Composed positional tokens
+
+When one argv token carries a small fixed grammar, declare that grammar on the
+node instead of globally splitting every positional on punctuation:
+
+```lua
+c.compose(
+  c.label("environment", c.capture(v.string())),
+  c.separator(":"), c.literal("database"), c.separator("="),
+  c.label("database", c.capture(v.boolean()))
+)
+-- `run dev:database=true` gives ctx.args.environment == "dev"
+-- and ctx.args.database == true.
+```
+
+The pattern is full-token and typed; separators trim adjacent whitespace by
+default. See [`docs/DSL.md`](docs/DSL.md#ccompose-one-token-multiple-typed-fields)
+for its fixed-pattern rules and opt-out.
+
+### End-of-grammar forwarding
+
+Use `c.tail` to capture tokens after a grammar terminator:
+
+```lua
+c.tail("forwarded", "--", { c.forward("complete") })
+```
+
+The deprecated `c["end"](...)` spelling remains a runtime-compatible alias.
+
 ---
 
 ## 3. Nested Commands & Explicit Inheritance
@@ -176,6 +258,7 @@ meteorite init development instant --json > stream.ndjson
 
 ## 8. Documentation Index
 
+- [`examples/README.md`](examples/README.md): Copyable standalone Moonstone projects.
 - [`docs/DSL.md`](docs/DSL.md): Declarative table DSL reference.
 - [`docs/COMMAND_GRAPH.md`](docs/COMMAND_GRAPH.md): Normalized Command Graph IR (`clingy.command-graph.v0`) specification.
 - [`docs/PARSING_SEMANTICS.md`](docs/PARSING_SEMANTICS.md): Multi-segment token parsing and grammar modes.

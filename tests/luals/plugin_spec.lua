@@ -36,6 +36,89 @@ h.describe("LuaLS Plugin — Static Analysis, Type Injection & Performance", fun
     h.assert.equal(fields.extra, "string[]", "extracted passthrough tokens")
   end)
 
+  h.it("uses explicit option and flag result keys in extracted context fields", function()
+    local sample_code = [[
+      local c = require("clingy")
+      local v = require("valua")
+
+      return c.node({
+        c.inherit(c.flag("global_debug", "--debug")),
+        c.flag("dry_run", "--dry-run", "-n"),
+        c.option("output_path", "--output", "-o", v.string()),
+        c.repeated(c.option("header_values", "--header", "-H", v.string())),
+        c.run(function(ctx) end),
+      })
+    ]]
+
+    local fields = plugin.extract_node_fields(sample_code)
+    h.assert.equal(fields.global_debug, "boolean")
+    h.assert.equal(fields.dry_run, "boolean")
+    h.assert.equal(fields.output_path, "string|nil")
+    h.assert.equal(fields.header_values, "(string)[]|nil")
+
+    local transformed = plugin.process_text("file:///explicit-keys.lua", sample_code)
+    h.assert.truthy(transformed:find("global_debug: boolean"))
+    h.assert.truthy(transformed:find("dry_run: boolean"))
+    h.assert.truthy(transformed:find("output_path: string|nil"))
+    h.assert.truthy(transformed:find("header_values: %(string%)%[%]|nil"))
+  end)
+
+  h.it("extracts labelled composed captures as independently typed context fields", function()
+    local sample_code = [[
+      local c = require("clingy")
+      local v = require("valua")
+      return c.node({
+        c.compose(
+          c.label("environment", c.capture(v.string())),
+          c.separator(":"), c.literal("database"), c.separator("="),
+          c.label("database", c.capture(v.boolean()))
+        ),
+        c.run(function(ctx) end),
+      })
+    ]]
+
+    local fields = plugin.extract_node_fields(sample_code)
+    h.assert.equal(fields.environment, "string")
+    h.assert.equal(fields.database, "boolean")
+  end)
+
+  h.it("extracts repeated c.define records as typed context arrays", function()
+    local sample_code = [[
+      local c = require("clingy")
+      local v = require("valua")
+      return c.node({
+        c.label("defines", c.repeated(c.define("-D", {
+          c.label("name", c.capture(v.string())),
+          c.separator({ "=", " ", "-" }),
+          c.label("value", c.capture(v.string())),
+        }))),
+        c.run(function(ctx) end),
+      })
+    ]]
+    local fields = plugin.extract_node_fields(sample_code)
+    h.assert.equal(fields.defines, "{ name: string, value: string }[]|nil")
+  end)
+
+  h.it("extracts c.tail and keyword-safe c[\"end\"] forwarding", function()
+    local file = assert(io.open("examples/advanced-grammar/src/main.lua", "r"))
+    local source = file:read("*a")
+    file:close()
+
+    h.assert.truthy(source:find('c.tail("forwarded", "--", { c.forward("complete") })', 1, true),
+      "fixture must use the canonical tail declaration spelling")
+
+    local fields = plugin.extract_node_fields(source)
+    h.assert.equal(fields.forwarded, "string[]", "end declaration injects forwarded tokens into ctx.args")
+
+    local transformed = plugin.process_text("file:///examples/advanced-grammar/src/main.lua", source)
+    h.assert.truthy(transformed:find("forwarded: string%[%]"),
+      "advanced grammar handler receives forwarded: string[]")
+
+    local alias_source = source:gsub("c%.tail", 'c["end"]')
+    local alias_fields = plugin.extract_node_fields(alias_source)
+    h.assert.equal(alias_fields.forwarded, "string[]", "deprecated alias retains forwarded typing")
+  end)
+
   h.it("generates correct LuaCATS context annotation string", function()
     local fields = {
       dirname = "string",

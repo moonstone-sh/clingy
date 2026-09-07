@@ -1,5 +1,6 @@
 local util = require("clingy.util")
 local discovery = require("clingy.completion.discovery")
+local composed = require("clingy.composed")
 
 local M = {}
 
@@ -77,13 +78,28 @@ function M.normalize(config)
     local short_clusters = false
     local short_clusters_inherited = false
     local passthrough_key = nil
+    local end_capture = nil
     local handler = nil
     local signals = nil
     local stages = {}
 
     local pos_index = 1
     for decl_idx, decl in ipairs(flattened) do
-      if decl._tag == "declaration" then
+      if decl._tag == "declaration" or decl._tag == "compose" then
+        if decl._tag == "compose" and decl.inherited then
+          error(string.format("Compilation Error: c.compose on node '%s' cannot be inherited", node_name))
+        end
+        if decl.kind == "define" and decl.inherited then
+          error(string.format("Compilation Error: c.define on node '%s' cannot be inherited", node_name))
+        end
+        if decl.kind == "define" and not decl.define_repeated then
+          error(string.format("Compilation Error: c.define on node '%s' must be wrapped exactly once by c.repeated(...)", node_name))
+        end
+
+        local composed_pattern = nil
+        if decl._tag == "compose" then
+          composed_pattern = composed.compile(decl)
+        end
         local binding_id = node_id .. ":" .. (decl.result_key or decl.name or tostring(decl_idx))
         local visibility = decl.inherited and "descendants" or "local"
 
@@ -97,25 +113,52 @@ function M.normalize(config)
           end
         end
 
+        local separator_policy = nil
+        if decl.kind == "option" then
+          local declared = decl.separator_policy
+          local attached = {}
+          local detached = false
+          for _, separator in ipairs((declared and declared.separators) or { "=", " " }) do
+            if separator == " " then
+              detached = true
+            else
+              table.insert(attached, separator)
+            end
+          end
+          separator_policy = {
+            attached = attached,
+            detached = detached,
+            trim = not declared or declared.trim ~= false,
+          }
+        elseif decl.kind == "flag" then
+          -- Flags recognize attached separators only to reject an attempted
+          -- value; they never consume one.
+          separator_policy = { attached = { "=" }, detached = false, trim = true }
+        end
+
         local binding = {
           id = binding_id,
           owner = node_id,
-          kind = decl.kind,
+          kind = decl._tag == "compose" and "compose" or decl.kind,
           name = decl.name,
           names = decl.names,
           result_key = decl.result_key,
           visibility = visibility,
-          position = decl.kind == "arg" and pos_index or nil,
+          position = (decl.kind == "arg" or decl._tag == "compose") and pos_index or nil,
           schema = decl.schema,
           completion = comp_meta,
           occurrence = decl.occurrence or { min = 0, max = 1 },
           values = decl.values or { min = 1, max = 1 },
           aggregate = decl.aggregate or "scalar",
           default = decl.default,
+          metadata = decl.metadata,
+          separator_policy = separator_policy,
           declaration_index = decl_idx,
+          composed_pattern = composed_pattern,
+          define_pattern = decl.define_pattern,
         }
 
-        if decl.kind == "arg" then
+        if decl.kind == "arg" or decl._tag == "compose" then
           pos_index = pos_index + 1
         end
 
@@ -134,6 +177,33 @@ function M.normalize(config)
           decl_map[decl._inner] = binding
         end
 
+        -- A labelled capture has no independent argv occurrence, but ctx:get
+        -- should still resolve its source handle to its own output field.
+        if composed_pattern then
+          for _, item in ipairs(composed_pattern.items) do
+            if item._tag == "capture" then
+              local capture_binding = { result_key = item.label }
+              if item.source then
+                decl_map[item.source] = capture_binding
+                if item.source._inner then
+                  decl_map[item.source._inner] = capture_binding
+                end
+              end
+            end
+          end
+          -- flatten_declarations deep-copies the pattern, so retain binding
+          -- identity for the capture handles supplied by the application too.
+          for _, item in ipairs((decl._orig_decl or decl).items or {}) do
+            if item._tag == "capture" then
+              local capture_binding = { result_key = item.label }
+              decl_map[item] = capture_binding
+              if item._inner then
+                decl_map[item._inner] = capture_binding
+              end
+            end
+          end
+        end
+
       elseif decl._tag == "parser_mode" then
         if ordering_mode and ordering_mode ~= decl.mode then
           error(string.format("Compilation Error: Conflicting parser modes ('%s' vs '%s') declared on node '%s'", ordering_mode, decl.mode, node_name))
@@ -149,6 +219,9 @@ function M.normalize(config)
         if passthrough_key then
           error(string.format("Compilation Error: Multiple passthrough declarations on node '%s'", node_name))
         end
+        if end_capture and not end_capture.legacy_passthrough then
+          error(string.format("Compilation Error: Multiple end declarations on node '%s'", node_name))
+        end
         passthrough_key = decl.key
         local binding_id = node_id .. ":--passthrough"
         local binding = {
@@ -157,7 +230,7 @@ function M.normalize(config)
           kind = "passthrough",
           name = "--",
           result_key = passthrough_key,
-          visibility = "local",
+          visibility = decl.inherited and "descendants" or "local",
           occurrence = { min = 0, max = 1 },
           values = { min = 0, max = nil },
           aggregate = "array",
@@ -166,6 +239,41 @@ function M.normalize(config)
         bindings[binding_id] = binding
         table.insert(node_binding_ids, binding_id)
         table.insert(declaration_order_ids, binding_id)
+        end_capture = {
+          binding = binding,
+          terminator = "--",
+          forward = "trimmed",
+          inherited = decl.inherited or false,
+          legacy_passthrough = true,
+        }
+
+      elseif decl._tag == "end" then
+        if end_capture then
+          error(string.format("Compilation Error: Multiple end declarations on node '%s'", node_name))
+        end
+        local binding_id = node_id .. ":end:" .. decl.result_key
+        local binding = {
+          id = binding_id,
+          owner = node_id,
+          kind = "end",
+          name = decl.terminator,
+          result_key = decl.result_key,
+          visibility = decl.inherited and "descendants" or "local",
+          occurrence = { min = 0, max = 1 },
+          values = { min = 0, max = nil },
+          aggregate = "array",
+          declaration_index = decl_idx,
+        }
+        bindings[binding_id] = binding
+        table.insert(node_binding_ids, binding_id)
+        table.insert(declaration_order_ids, binding_id)
+        end_capture = {
+          binding = binding,
+          terminator = decl.terminator,
+          forward = decl.forward,
+          inherited = decl.inherited or false,
+          legacy_passthrough = false,
+        }
 
       elseif decl._tag == "run" then
         handler = decl.handler
@@ -222,6 +330,7 @@ function M.normalize(config)
       signals = signals,
       stages = stages,
       passthrough_key = passthrough_key,
+      end_capture = end_capture,
       decl_map = decl_map,
       metadata = node_ast.metadata or {},
     }
@@ -262,7 +371,7 @@ function M.validate_graph(graph)
       local b = bindings[b_id]
       if b then
         -- Invariant 13: Positional arguments cannot be inherited
-        if b.kind == "arg" and b.visibility == "descendants" then
+        if (b.kind == "arg" or b.kind == "compose") and b.visibility == "descendants" then
           error(string.format("Compilation Error: Positional argument '%s' on node '%s' cannot be inherited (Section 16, Invariant 13)", b.name, node.name))
         end
 
@@ -279,16 +388,19 @@ function M.validate_graph(graph)
         end
 
         -- Invariant 12: Output key collision on same node
-        if local_keys[b.result_key] then
-          error(string.format("Compilation Error: Output-key collision on node '%s' for key '%s'", node.name, b.result_key))
+        local output_keys = b.composed_pattern and b.composed_pattern.labels or { b.result_key }
+        for _, output_key in ipairs(output_keys) do
+          if local_keys[output_key] then
+            error(string.format("Compilation Error: Output-key collision on node '%s' for key '%s'", node.name, output_key))
+          end
+          -- Invariant 12: Output key collision along route
+          if inherited_scope.keys[output_key] then
+            error(string.format("Compilation Error: Output-key collision along route to node '%s' for key '%s'", node.name, output_key))
+          end
+          local_keys[output_key] = b
         end
-        -- Invariant 12: Output key collision along route
-        if inherited_scope.keys[b.result_key] then
-          error(string.format("Compilation Error: Output-key collision along route to node '%s' for key '%s'", node.name, b.result_key))
-        end
-        local_keys[b.result_key] = b
 
-        if b.kind == "arg" then
+        if b.kind == "arg" or b.kind == "compose" then
           table.insert(positional_bindings, b)
         elseif b.kind == "option" or b.kind == "flag" then
           for _, name in ipairs(b.names or {}) do
@@ -304,12 +416,20 @@ function M.validate_graph(graph)
             end
           end
         end
+
+        if b.kind == "define" then
+          local prefix = b.define_pattern and b.define_pattern.prefix
+          if local_names[prefix] then
+            error(string.format("Compilation Error: Duplicate c.define prefix '%s' on node '%s'", prefix, node.name))
+          end
+          local_names[prefix] = b
+        end
       end
     end
 
     -- Invariant 13: Non-final repeated positionals
     for i = 1, #positional_bindings - 1 do
-      if positional_bindings[i].occurrence.max == nil then
+        if positional_bindings[i].occurrence.max == nil then
         error(string.format("Compilation Error: Non-final repeated positional '%s' followed by positional '%s' on node '%s' (Invariant 13)",
           positional_bindings[i].name, positional_bindings[i + 1].name, node.name))
       end
@@ -348,7 +468,13 @@ function M.validate_graph(graph)
         end
       end
       if b then
-        next_keys[b.result_key] = b
+        if b.composed_pattern then
+          for _, output_key in ipairs(b.composed_pattern.labels) do
+            next_keys[output_key] = b
+          end
+        else
+          next_keys[b.result_key] = b
+        end
       end
     end
 
@@ -386,13 +512,18 @@ function M.compile_router(graph)
     local positionals = {}
     local options = {}
     local flags = {}
+    local defines = {}
     local ordered_bindings = {}
+    local effective_end_capture = inherited_ctx.end_capture
+    if node.end_capture then
+      effective_end_capture = node.end_capture
+    end
 
     for _, b_id in ipairs(node.declaration_order) do
       local b = bindings[b_id]
       if b then
         table.insert(ordered_bindings, b)
-        if b.kind == "arg" then
+        if b.kind == "arg" or b.kind == "compose" then
           table.insert(positionals, b)
         elseif b.kind == "option" then
           table.insert(options, b)
@@ -404,6 +535,8 @@ function M.compile_router(graph)
           for _, name in ipairs(b.names or {}) do
             visible_bindings_by_name[name] = b
           end
+        elseif b.kind == "define" then
+          table.insert(defines, b)
         end
       end
     end
@@ -438,10 +571,19 @@ function M.compile_router(graph)
       next_short_clusters = true
     end
 
+    -- End markers follow the same explicit inheritance rule as bindings: a
+    -- local end declaration controls only this segment unless wrapped in
+    -- c.inherit(...).
+    local next_end_capture = inherited_ctx.end_capture
+    if node.end_capture and node.end_capture.inherited then
+      next_end_capture = node.end_capture
+    end
+
     local child_inherited_ctx = {
       options = next_options,
       mode = next_mode,
       short_clusters = next_short_clusters,
+      end_capture = next_end_capture,
     }
 
     local children = {}
@@ -457,6 +599,7 @@ function M.compile_router(graph)
       args = positionals,
       options = options,
       flags = flags,
+      defines = defines,
       visible_options_by_name = visible_bindings_by_name,
       inherited_options_by_name = inherited_ctx.options,
       children = children,
@@ -464,6 +607,7 @@ function M.compile_router(graph)
       mode = effective_mode,
       short_clusters = effective_short_clusters,
       passthrough_key = node.passthrough_key,
+      end_capture = effective_end_capture,
       handler = node.handler,
       signals = node.signals,
       stages = node.stages or {},
@@ -480,6 +624,7 @@ function M.compile_router(graph)
     options = {},
     mode = "interspersed",
     short_clusters = false,
+    end_capture = nil,
   })
 
   return {
@@ -506,4 +651,3 @@ function M.compile(config)
 end
 
 return M
-

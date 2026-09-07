@@ -44,15 +44,34 @@ For each token in `argv`:
 
 ### 2.1 Option & Flag Parsing
 1. **Long Form & Short Form Matching**: Looked up in `node.visible_options_by_name`.
-2. **Attached Values (`--key=val`)**: Extracted and passed directly to the schema validator.
+2. **Attached Values (`--key=val` / `--key:val`)**: Both spellings (and their short aliases, such as `-k=val`) are extracted and passed directly to the schema validator.
 3. **Detached Values (`-c val` / `--config val`)**: The parser advances `i = i + 1` to consume the next token from `argv`. If the next token is missing or is `--`, a compile/runtime parsing error is raised (`"Option requires a value"`).
-4. **Flag Invariant**: Flags with attached values (`--flag=true`) are rejected. Flags always record boolean `true` and consume 0 argv tokens.
+4. **Flag Invariant**: Flags with attached values (`--flag=true` or `--flag:true`) are rejected. Flags always record boolean `true` and consume 0 argv tokens; a following detached token remains available to positional parsing.
+5. **Exact Alias Precedence**: A declared alias containing `:` or `=` is matched
+   exactly before attached-value splitting, preserving legacy aliases such as
+   `--legacy:flag`.
 
 ### 2.2 Short Flag Clustering (`c.short_clusters()`)
 When enabled on a node:
 - Single-dash tokens with length $\ge 2$ matching `^%-[a-zA-Z0-9]+$` (e.g. `-xvf`) are decomposed into individual characters (`-x`, `-v`, `-f`).
 - Every character in the cluster MUST be a visible flag consuming 0 values.
 - If any character corresponds to an option taking a value or an unknown token, clustering is rejected and standard option lookup is evaluated.
+
+### 2.3 Composed Positional Tokens (`c.compose(...)`)
+`c.compose` consumes one positional argv token through its node-declared fixed
+pattern. It is evaluated only when that positional slot is selected; Clingy
+does not split all ordinary positionals on `:` or `=`. The matcher is anchored
+to the complete token, validates each labelled capture through the normal
+schema adapter path, and publishes only the labels into the owning route
+segment and `ctx.args`.
+
+Pattern separators match their punctuation plus surrounding whitespace by
+default. `{ trim = false }` leaves that whitespace in the adjacent capture.
+
+See the runnable [`advanced-grammar` example](../examples/advanced-grammar/) for
+composed captures, repeated `c.define` records, and end forwarding together.
+The compiler rejects capture pairs without an intervening fixed fragment, so
+the parser never guesses a boundary between two variable fields.
 
 ---
 

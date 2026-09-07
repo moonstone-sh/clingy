@@ -1,0 +1,27 @@
+manifest_version = 2
+
+[package]
+name = "hello"
+version = "0.1.0"
+kind = "script"
+description = "A small positional greeting"
+
+[interpreter]
+name = "lua"
+version = "5.4"
+abi = "5.4"
+
+[scripts]
+run = "lua ./src/main.lua"
+
+[[registries]]
+name = "test"
+resolver = "moonstone"
+path = "../../../test-reg"
+priority = 0
+
+[[dependencies]]
+name = "moonstone/valua"
+constraint = "0.2.5"
+registry = "test"
+role = "runtime"

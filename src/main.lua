@@ -5,7 +5,7 @@ local init_cmd = require("clingy.cli.init")
 local app
 app = c.create({
   name = "clingy",
-  version = "0.1.0",
+  version = "0.2.0",
   description = "Deterministic Declarative CLI Engine for Lua",
 
   c.root(c.node({

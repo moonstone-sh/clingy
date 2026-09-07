@@ -223,6 +223,36 @@ describe("Core Shell Completion Engine", function()
       assert.truthy(vals["--trace"], "repeatable flag long form remains")
       assert.falsy(vals["--trace_not_present"])
     end)
+
+    it("completes colon-attached values and preserves colon aliases", function()
+      local app = c.create({
+        name = "colon_complete",
+        c.root(c.node({
+          c.separator({ "=", ":", " " }, c.option("mode", "--mode", "-m", v.picklist({ "fast", "safe" }))),
+          c.flag("legacy_flag", "--legacy:flag"),
+          c.flag("other", "--other"),
+        })),
+      })
+
+      local long_resp = app:complete({ "colon_complete", "--mode:fa" })
+      assert.equal(#long_resp.candidates, 1)
+      assert.equal(long_resp.candidates[1].value, "--mode:fast")
+
+      local short_resp = app:complete({ "colon_complete", "-m:fa" })
+      assert.equal(#short_resp.candidates, 1)
+      assert.equal(short_resp.candidates[1].value, "-m:fast")
+
+      local after_option = app:complete({ "colon_complete", "--mode:fast", "-" })
+      local option_names = {}
+      for _, cand in ipairs(after_option.candidates) do option_names[cand.value] = true end
+      assert.falsy(option_names["--mode"], "colon-attached option is counted as consumed")
+
+      local after_colon_alias = app:complete({ "colon_complete", "--legacy:flag", "-" })
+      local flag_names = {}
+      for _, cand in ipairs(after_colon_alias.candidates) do flag_names[cand.value] = true end
+      assert.falsy(flag_names["--legacy:flag"], "exact colon alias is counted as a flag")
+      assert.truthy(flag_names["--other"])
+    end)
   end)
 
   describe("Grammar Modes Completion (Interspersed, Leading, Ordered)", function()

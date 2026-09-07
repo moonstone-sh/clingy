@@ -1,0 +1,4 @@
+.moonstone/
+zig-cache/
+zig-out/
+.DS_Store

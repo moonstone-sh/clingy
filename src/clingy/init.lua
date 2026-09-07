@@ -45,6 +45,10 @@ c.inherit = dsl.inherit
 c.arg = dsl.arg
 c.option = dsl.option
 c.flag = dsl.flag
+c.define = dsl.define
+c.capture = dsl.capture
+c.literal = dsl.literal
+c.compose = dsl.compose
 
 -- Cardinality modifiers
 c.optional = dsl.optional
@@ -59,6 +63,11 @@ c.short_clusters = dsl.short_clusters
 
 -- Passthrough
 c.passthrough = dsl.passthrough
+c.label = dsl.label
+c.separator = dsl.separator
+c.tail = dsl.tail
+c["end"] = dsl.tail -- Deprecated compatibility alias; use c.tail.
+c.forward = dsl.forward
 
 -- Handlers and signals
 c.run = dsl.run

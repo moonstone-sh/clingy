@@ -20,7 +20,7 @@ local function format_usage(app, node, path_segments)
 
   if node.args and #node.args > 0 then
     for _, arg in ipairs(node.args) do
-      local name = arg.name:upper()
+      local name = (arg.name or (arg.composed_pattern and arg.composed_pattern.display) or arg.result_key):upper()
       if arg.occurrence and arg.occurrence.max == nil then
         name = "<" .. name .. "...>"
       elseif arg.occurrence and arg.occurrence.min == 0 then
@@ -71,7 +71,8 @@ function M.format_help(app, node, path_segments)
     table.insert(lines, "Arguments:")
     for _, arg in ipairs(node.args) do
       local schema_info = adapter.inspect_schema(arg.schema)
-      local name_col = string.format("  <%s>", arg.name:upper())
+      local display_name = arg.name or (arg.composed_pattern and arg.composed_pattern.display) or arg.result_key
+      local name_col = string.format("  <%s>", display_name:upper())
       local desc_parts = {}
 
       local doc_desc = (arg.metadata and arg.metadata.description) or schema_info.description

@@ -16,7 +16,7 @@
 
 ---@class clingy.Binding<O>
 ---@field _tag "declaration"
----@field kind "arg"|"option"|"flag"|"passthrough"
+---@field kind "arg"|"option"|"flag"|"define"|"passthrough"
 ---@field name? string
 ---@field names? string[]
 ---@field result_key string
@@ -215,6 +215,9 @@ function Context:fail(msg_or_err, exit_code) end
 function Context:confirm(prompt, opts) end
 
 ---@class clingy
+---@field tail fun(name: string, terminator: string, opts: { [1]: clingy.ForwardPolicy }): clingy.EndDeclaration
+---@deprecated Use c.tail instead.
+---@field ["end"] fun(name: string, terminator: string, opts: { [1]: clingy.ForwardPolicy }): clingy.EndDeclaration
 local c = {}
 
 ---Compiles a declarative CLI specification into an executable App.
@@ -252,20 +255,103 @@ function c.inherit(...) end
 ---@overload fun(name: string): clingy.Binding<string>
 function c.arg(name, schema) end
 
+---@class clingy.Capture<O>
+---@field _tag "capture"
+---@field schema? any
+---@field label? string
+---@field source? clingy.Capture<O>
+---@field _inner? clingy.Capture<O>
+
+---@class clingy.DefineSeparator
+---@field _tag "define_separator"
+---@field separators string[] Includes " " for detached values.
+
+---@class clingy.ComposeSeparator
+---@field _tag "compose_separator"
+---@field text string
+---@field trim boolean
+
+---@class clingy.Literal
+---@field _tag "literal"
+---@field text string
+
+---@class clingy.ForwardPolicy
+---@field _tag "forward"
+---@field mode "trimmed"|"complete"
+
+---@class clingy.EndDeclaration
+---@field _tag "end"
+---@field result_key string
+---@field terminator string
+---@field forward "trimmed"|"complete"
+
+---@class clingy.DefineRecord<N, V>
+---@field name N
+---@field value V
+
+---@class clingy.ComposedPositional
+---@field _tag "compose"
+---@field items (clingy.Capture<any>|clingy.Literal|clingy.ComposeSeparator)[]
+
+---Declares a typed capture fragment for c.compose. It must be labelled.
+---@generic I, O
+---@param schema? standard_schema.Schema<I, O>
+---@return clingy.Capture<O>
+function c.capture(schema) end
+
+---Declares a two-field compiler-style definition record. The fragment table
+---must contain labelled `name`, separator, and labelled `value` captures.
+---@generic N, V
+---@param prefix string
+---@param fragments { [1]: clingy.Capture<N>, [2]: clingy.DefineSeparator, [3]: clingy.Capture<V> }
+---@return clingy.Binding<clingy.DefineRecord<N, V>|nil>
+function c.define(prefix, fragments) end
+
+---Declares exact fixed text in a composed positional pattern.
+---@param text string
+---@return clingy.Literal
+function c.literal(text) end
+
+---Builds one required positional argv token from labelled captures, literals,
+---and separators. The entire token must match.
+---@param ... clingy.Capture<any>|clingy.Literal|clingy.ComposeSeparator
+---@return clingy.ComposedPositional
+function c.compose(...) end
+
+---Labels a binding result or a capture within c.compose.
+---@generic O
+---@overload fun(declaration: clingy.Binding<O>|clingy.Capture<O>, name: string): clingy.Binding<O>|clingy.Capture<O>
+---@param name string
+---@param declaration clingy.Binding<O>|clingy.Capture<O>
+---@return clingy.Binding<O>|clingy.Capture<O>
+function c.label(name, declaration) end
+
+---Controls an option's accepted value separators. `""` declares an adjacent
+---value and is accepted only by the option-wrapper overload, never a pattern
+---fragment or flag.
+---@overload fun(separators: string[], opts?: { trim?: boolean }): clingy.DefineSeparator
+---@overload fun(text: string, opts?: { trim?: boolean }): clingy.ComposeSeparator
+---@param separators string|string[]
+---@param option clingy.Binding<any>
+---@param opts? { trim?: boolean }
+---@return clingy.Binding<any>
+function c.separator(separators, option, opts) end
+
 ---Declares a named option with a value.
 ---Default occurrence: 0..1 (optional).
 ---@generic I, O
+---@overload fun(result_key: string, long: string, short: string, schema: standard_schema.Schema<I, O>): clingy.Binding<O|nil>
 ---@overload fun(name: string, schema: standard_schema.Schema<I, O>): clingy.Binding<O|nil>
 ---@overload fun(short: string, long: string, schema: standard_schema.Schema<I, O>): clingy.Binding<O|nil>
 ---@overload fun(name: string): clingy.Binding<string|nil>
 ---@overload fun(short: string, long: string): clingy.Binding<string|nil>
----@param ... any Names starting with '-' followed by optional schema
+---@param ... any Explicit form: result_key first, aliases, then final schema. Legacy alias-only forms are also accepted.
 ---@return clingy.Binding<any>
 function c.option(...) end
 
 ---Declares a boolean flag.
 ---Default occurrence: 0..1 (absent: false, present: true).
----@param ... string Flag names starting with '-'
+---@param ... any Optional explicit result_key followed by flag names starting with '-'
 ---@return clingy.Binding<boolean>
 function c.flag(...) end
 
@@ -305,8 +391,28 @@ function c.short_clusters() end
 
 ---Declares a passthrough capture key for tokens following '--'.
 ---@param key? string
----@return table
+---@return clingy.Binding<string[]>
 function c.passthrough(key) end
+
+---Selects how c.tail forwards its terminator and remaining tokens.
+---@param mode "trimmed"|"complete"
+---@return clingy.ForwardPolicy
+function c.forward(mode) end
+
+---Declares a node tail marker and raw token capture.
+---@param name string
+---@param terminator string
+---@param opts { [1]: clingy.ForwardPolicy }
+---@return clingy.EndDeclaration
+function c.tail(name, terminator, opts) end
+
+---Deprecated compatibility alias for c.tail.
+---@deprecated Use c.tail instead.
+---@param name string
+---@param terminator string
+---@param opts { [1]: clingy.ForwardPolicy }
+---@return clingy.EndDeclaration
+c["end"] = function(name, terminator, opts) end
 
 ---Declares the execution handler for a command node.
 ---@param fn fun(ctx: clingy.Context<table<string, any>>): any
