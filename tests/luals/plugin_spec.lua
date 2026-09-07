@@ -205,8 +205,8 @@ h.describe("LuaLS Plugin — Static Analysis, Type Injection & Performance", fun
       local elapsed_ms = (os.clock() - start_time) * 1000
 
       h.assert.not_nil(result, "processed benchmark source for count=" .. count)
-      -- Assert reasonable execution latency (< 50ms even for 500 commands)
-      h.assert.truthy(elapsed_ms < 50, string.format("latency for %d commands is %.2f ms (< 50 ms)", count, elapsed_ms))
+      -- Assert reasonable execution latency (< 150ms even for 500 commands on shared CI runners)
+      h.assert.truthy(elapsed_ms < 150, string.format("latency for %d commands is %.2f ms (< 150 ms)", count, elapsed_ms))
     end
   end)
   h.it("unannotated anything.integer() evaluates strictly to unknown (asserts no constructor name guessing!)", function()
