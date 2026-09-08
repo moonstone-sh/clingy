@@ -58,10 +58,10 @@ moon exec sh -c 'lua src/main.lua dev:database=false -Dmode=debug --profile:ci "
 ```
 
 ### 4. [`meteorite/`](meteorite/) — Canonical Multi-Command Architecture
-Demonstrates the full declarative table DSL from Section 47 of the Clingy specification:
-* Root global inheritance (`c.inherit(c.flag("-v", "--verbose"))`).
+Demonstrates table declarations and nested command routing:
+* Root global inheritance (`c.inherit({ c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }) })`).
 * Subtree inheritance (`init` inherits `--json` into `instant`).
-* Cardinality algebra with repeated build flags (`c.repeated(c.option("-D", "--define", Define))`).
+* Repeated values with `occurs = { min = 0, max = "many" }`.
 * Strict ordered grammar pipeline (`c.ordered()`).
 * Opt-in short flag clustering (`-vn` &rarr; `-v -n`).
 * Signal handlers with custom interrupt behavior (`c.signals`).
@@ -136,9 +136,9 @@ moon exec lua src/main.lua --json compile desktop -o dist
 
 ## Shell Completions
 
-All example projects implement first-class shell completions powered by Clingy's `CompletionEngine`:
+Examples use Clingy's shell completion engine:
 - **Schema-Derived Autocomplete**: Picklists and enums (e.g. `v.picklist({ "development", "production", "test" })`) are discovered automatically.
-- **Filesystem Completions**: Options and positionals use `c.complete(c.directory(), ...)` or `c.complete(c.file(), ...)` delegating natively to host shells.
+- **Filesystem Completions**: Reusable file and directory suggestions belong to schema completion metadata; a declaration or capture may override them locally.
 - **Dynamic Context Inspection**: In `subprocess-lifecycle`, worker task names adapt dynamically to preceding `--tasks` arguments (`runner worker --tasks 4 <TAB>` &rarr; `job-01..job-04`).
 - **Structured Descriptions**: In `json-stream-events`, `--profile` options provide rich candidate descriptions formatted natively for Zsh, Fish, and PowerShell.
 
@@ -194,5 +194,5 @@ Each example project contains a `.luarc.json` configured with:
 
 When opened in Neovim:
 1. **Live `ctx.args` Autocomplete**: Typing `ctx.args.` inside `c.run(function(ctx) ... end)` presents autocomplete for all declared args, flags, and options with exact Valua output types.
-2. **First-Class `Binding<O>` Handles**: Local declaration variables (`local dir = c.arg(...)`) provide full hover type info and typed returns on `ctx:get(dir)`.
+2. **Explicit Result Shapes**: Table declarations and form captures provide stable handler fields with schema-derived types.
 3. **Zero Configuration**: No code generation or pre-compilation is required.

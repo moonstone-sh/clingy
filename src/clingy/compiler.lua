@@ -146,6 +146,7 @@ function M.normalize(config)
           visibility = visibility,
           position = (decl.kind == "arg" or decl._tag == "compose") and pos_index or nil,
           schema = decl.schema,
+          form = decl.form,
           completion = comp_meta,
           occurrence = decl.occurrence or { min = 0, max = 1 },
           values = decl.values or { min = 1, max = 1 },
@@ -429,7 +430,7 @@ function M.validate_graph(graph)
 
     -- Invariant 13: Non-final repeated positionals
     for i = 1, #positional_bindings - 1 do
-        if positional_bindings[i].occurrence.max == nil then
+        if positional_bindings[i].occurrence.max == nil and not positional_bindings[i].form then
         error(string.format("Compilation Error: Non-final repeated positional '%s' followed by positional '%s' on node '%s' (Invariant 13)",
           positional_bindings[i].name, positional_bindings[i + 1].name, node.name))
       end

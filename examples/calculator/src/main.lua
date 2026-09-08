@@ -26,15 +26,20 @@ local CLI = c.create({
   version = "0.1.0",
   description = "A base-aware two-operand calculator",
   c.root(c.node({
-    c.inherit(c.flag("--json")),
-    c.label("defines", c.repeated(c.define("-D", {
-      c.label("name", c.capture(v.string())),
-      c.separator({ "=", " " }),
-      c.label("value", c.capture(v.integer())),
-    }))),
-    c.arg("operation", v.picklist({ "add", "subtract", "multiply", "divide" })),
-    c.arg("left", v.string()),
-    c.arg("right", v.string()),
+    c.inherit({ c.flag({ key = "json", aliases = { "--json" } }) }),
+    c.option({
+      key = "defines", aliases = { "-D" }, occurs = { min = 0, max = "many" },
+      form = c.sequence({
+        c.capture({ key = "name", schema = v.string() }),
+        c.choice({
+          c.sequence({ c.literal({ text = "=" }), c.capture({ key = "value", schema = v.integer() }) }),
+          c.sequence({ c.next_token(), c.capture({ key = "value", schema = v.integer() }) }),
+        }),
+      }),
+    }),
+    c.arg({ key = "operation", schema = v.picklist({ "add", "subtract", "multiply", "divide" }) }),
+    c.arg({ key = "left", schema = v.string() }),
+    c.arg({ key = "right", schema = v.string() }),
     c.run(function(ctx)
       local base = 10
       for _, definition in ipairs(ctx.args.defines or {}) do

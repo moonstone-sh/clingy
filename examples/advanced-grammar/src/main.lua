@@ -7,24 +7,32 @@ local v = require("valua")
 local CLI = c.create({
   name = "advanced-grammar",
   version = "0.1.0",
-  description = "Composed tokens, definitions, separators, and forwarding",
+  description = "Structured forms, option forms, and forwarding",
   c.root(c.node({
-    c.compose(
-      c.label("environment", c.capture(v.string())),
-      c.separator(":"), c.literal("database"), c.separator("="),
-      c.label("database", c.capture(v.boolean()))
-    ),
-    c.label("defines", c.repeated(c.define("-D", {
-      c.label("name", c.capture(v.string())),
-      c.separator({ "=", " " }),
-      c.label("value", c.capture(v.string())),
-    }))),
-    c.separator({ "=", ":", " " }, c.option("--profile", v.string())),
+    c.arg({
+      key = "target",
+      form = c.sequence({
+        c.capture({ key = "environment", schema = v.string() }),
+        c.literal({ text = ":database=" }),
+        c.capture({ key = "database", schema = v.boolean() }),
+      }),
+    }),
+    c.option({
+      key = "defines", aliases = { "-D" }, occurs = { min = 0, max = "many" },
+      form = c.sequence({
+        c.capture({ key = "name", schema = v.string() }),
+        c.choice({
+          c.sequence({ c.literal({ text = "=" }), c.capture({ key = "value", schema = v.string() }) }),
+          c.sequence({ c.next_token(), c.capture({ key = "value", schema = v.string() }) }),
+        }),
+      }),
+    }),
+    c.option({ key = "profile", aliases = { "--profile" }, value = { schema = v.string(), attached = { "=", ":" }, detached = true } }),
     c.tail("forwarded", "--", { c.forward("complete") }),
     c.run(function(ctx)
       local result = {
-        environment = ctx.args.environment,
-        database = ctx.args.database,
+        environment = ctx.args.target.environment,
+        database = ctx.args.target.database,
         profile = ctx.args.profile or "default",
         defines = ctx.args.defines or {},
         forwarded = ctx.args.forwarded or {},

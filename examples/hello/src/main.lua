@@ -9,8 +9,8 @@ local CLI = c.create({
   version = "0.1.0",
   description = "A small positional greeting",
   c.root(c.node({
-    c.optional(c.flag("--shout")),
-    c.arg("name", v.string()),
+    c.flag({ key = "shout", aliases = { "--shout" } }),
+    c.arg({ key = "name", schema = v.string() }),
     c.run(function(ctx)
       local greeting = "Hello, " .. ctx.args.name .. "!"
       if ctx.args.shout then greeting = string.upper(greeting) end

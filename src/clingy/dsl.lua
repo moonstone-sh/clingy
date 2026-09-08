@@ -4,6 +4,35 @@ local providers = require("clingy.completion.providers")
 
 local M = {}
 
+-- Form atoms describe a value grammar over argv words and offsets.  They are
+-- deliberately separate from declarations: an arg or option chooses where a
+-- form starts, while these atoms describe what it consumes.
+function M.sequence(parts)
+  if type(parts) ~= "table" or not util.is_array(parts) or #parts == 0 then
+    error("c.sequence requires a non-empty array of form atoms")
+  end
+  return { _tag = "form_sequence", parts = parts }
+end
+
+function M.choice(parts)
+  if type(parts) ~= "table" or not util.is_array(parts) or #parts == 0 then
+    error("c.choice requires a non-empty array of form atoms")
+  end
+  return { _tag = "form_choice", parts = parts }
+end
+
+function M.next_token()
+  return { _tag = "form_next_token" }
+end
+
+function M.optional(part)
+  if type(part) == "table" and part._tag and part._tag:match("^form_") then
+    return { _tag = "form_optional", part = part }
+  end
+  -- Legacy cardinality is intentionally no longer supported.
+  error("c.optional is a form atom; use occurs = { min = 0, max = 1 } on declarations")
+end
+
 local function nonblank_string(value, subject)
   if type(value) ~= "string" or value:match("^%s*$") then
     error(subject .. " must be a string containing non-whitespace characters")
@@ -91,23 +120,34 @@ end
 ---Default occurrence: 1..1
 ---Default values: 1..1
 ---Default aggregate: "scalar"
-function M.arg(name, schema)
-  nonblank_string(name, "c.arg name")
+function M.arg(opts)
+  if type(opts) ~= "table" or opts.key == nil then
+    error("c.arg requires { key = ..., schema = ... }")
+  end
+  local name = nonblank_string(opts.key, "c.arg key")
+  local occurs = opts.occurs or { min = 1, max = 1 }
+  if occurs.max == "many" then occurs = { min = occurs.min or 0, max = nil } end
   return {
     _tag = "declaration",
     kind = "arg",
     name = name,
     result_key = name,
-    schema = schema,
-    occurrence = { min = 1, max = 1 },
+    schema = opts.schema,
+    form = opts.form,
+    occurrence = occurs,
+    aggregate = opts.occurs and opts.occurs.max == "many" and "array" or "scalar",
     values = { min = 1, max = 1 },
-    aggregate = "scalar",
   }
 end
 
 ---Declares a schema-bearing capture fragment for c.compose.
 ---Captures must be labelled by c.label before they are placed in a pattern.
-function M.capture(schema)
+function M.capture(opts)
+  if type(opts) == "table" and opts.key then
+    nonblank_string(opts.key, "c.capture key")
+    return { _tag = "form_capture", key = opts.key, schema = opts.schema, complete = opts.complete }
+  end
+  local schema = opts
   return {
     _tag = "capture",
     schema = schema,
@@ -115,7 +155,12 @@ function M.capture(schema)
 end
 
 ---Declares exact fixed text in a c.compose pattern.
-function M.literal(text)
+function M.literal(opts)
+  if type(opts) == "table" then
+    local text = nonblank_string(opts.text, "c.literal text")
+    return { _tag = "form_literal", text = text }
+  end
+  local text = opts
   nonblank_string(text, "c.literal text")
   return {
     _tag = "literal",
@@ -161,6 +206,34 @@ end
 ---Default aggregate: "scalar"
 function M.option(...)
   local args = { ... }
+  local opts = args[1]
+  if type(opts) ~= "table" or opts.key == nil then
+    error("c.option requires { key = ..., aliases = { ... }, value = { schema = ... } }")
+  end
+  if not util.is_array(opts.aliases or {}) or #opts.aliases == 0 then
+    error("c.option aliases must be a non-empty array")
+  end
+  nonblank_string(opts.key, "c.option key")
+  local value = opts.value or { schema = opts.schema }
+  local occurs = opts.occurs or { min = 0, max = 1 }
+  if occurs.max == "many" then occurs = { min = occurs.min or 0, max = nil } end
+  local separators = value.separators or {
+    attached = value.attached or { "=" },
+    detached = value.detached ~= false,
+    adjacent = value.adjacent == true,
+  }
+  local legacy_separators = {}
+  for _, text in ipairs(separators.attached or {}) do table.insert(legacy_separators, text) end
+  if separators.adjacent then table.insert(legacy_separators, "") end
+  if separators.detached then table.insert(legacy_separators, " ") end
+  do return {
+    _tag = "declaration", kind = "option", names = opts.aliases,
+    result_key = opts.key, explicit_result_key = true, schema = value.schema, form = opts.form,
+    occurrence = occurs, values = { min = 1, max = 1 },
+    aggregate = opts.occurs and opts.occurs.max == "many" and "array" or "scalar",
+    separator_policy = { separators = legacy_separators, trim = value.trim ~= false },
+    completion = opts.complete,
+  } end
   local names = {}
   local explicit_key = nil
   local schema = nil
@@ -225,6 +298,21 @@ end
 ---Absent: false, Present: true
 function M.flag(...)
   local args = { ... }
+  local opts = args[1]
+  if type(opts) ~= "table" or opts.key == nil then
+    error("c.flag requires { key = ..., aliases = { ... } }")
+  end
+  if not util.is_array(opts.aliases or {}) or #opts.aliases == 0 then
+    error("c.flag aliases must be a non-empty array")
+  end
+  nonblank_string(opts.key, "c.flag key")
+  do return {
+    _tag = "declaration", kind = "flag", names = opts.aliases,
+    result_key = opts.key, explicit_result_key = true,
+    occurrence = opts.occurs or { min = 0, max = 1 },
+    values = { min = 0, max = 0 }, aggregate = "scalar", default = false,
+    metadata = opts.metadata or {}, completion = opts.complete,
+  } end
   local names = {}
   local metadata = nil
   local explicit_key = nil
@@ -508,6 +596,9 @@ end
 
 ---Cardinality modifier: sets occurrence.min = 0. Preserves occurrence.max.
 function M.optional(decl)
+  if type(decl) == "table" and type(decl._tag) == "string" and decl._tag:match("^form_") then
+    return { _tag = "form_optional", part = decl }
+  end
   if type(decl) == "table" and decl._tag == "compose" then
     error("c.optional cannot wrap c.compose; composed patterns are fixed one-token positionals")
   end

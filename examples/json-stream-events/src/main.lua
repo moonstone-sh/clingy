@@ -11,21 +11,21 @@ local CLI = c.create({
     description = "Deterministic Build CLI with JSON Stream Support",
 
     c.root(c.node({
-        c.inherit(
-            c.flag("--json"),
-            c.flag("-v", "--verbose")
-        ),
+        c.inherit({
+            c.flag({ key = "json", aliases = { "--json" } }),
+            c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }),
+        }),
 
         compile = c.node({
-            c.arg("target", v.picklist({ "web", "desktop", "native" })),
-            c.complete(c.directory(), c.option("-o", "--output", v.string())),
+            c.arg({ key = "target", schema = v.picklist({ "web", "desktop", "native" }) }),
+            c.complete(c.directory(), c.option({ key = "output", aliases = { "-o", "--output" }, value = { schema = v.string() } })),
             c.complete(c.values({
                 { value = "debug", description = "Unoptimized build with debug symbols" },
                 { value = "release", description = "Standard optimized release build" },
                 { value = "release-small", description = "Size-optimized binary" },
                 { value = "release-fast", description = "Aggressive speed-optimized binary" },
-            }), c.option("-p", "--profile")),
-            c.complete(c.none(), c.option("--secret-token")),
+            }), c.option({ key = "profile", aliases = { "-p", "--profile" }, value = { schema = v.string() } })),
+            c.complete(c.none(), c.option({ key = "secret_token", aliases = { "--secret-token" }, value = { schema = v.string() } })),
 
             c.run(function(ctx)
                 ctx:span("compilation", function()
@@ -49,7 +49,7 @@ local CLI = c.create({
 
         -- Subcommand: completion
         completion = c.node({
-            c.arg("shell", v.picklist({ "bash", "zsh", "fish", "powershell" })),
+            c.arg({ key = "shell", schema = v.picklist({ "bash", "zsh", "fish", "powershell" }) }),
 
             c.run(function(ctx)
                 local script = ctx.app:completion_script(ctx.args.shell, "builder")

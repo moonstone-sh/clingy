@@ -11,13 +11,11 @@ local CLI = c.create({
     description = "Subprocess & Lifecycle Scopes Example",
 
     c.root(c.node({
-        c.inherit(
-            c.flag("-v", "--verbose")
-        ),
+        c.inherit({ c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }) }),
 
         worker = c.node({
-            c.complete(c.values({ "1", "2", "4", "8", "16" }), c.option("-t", "--tasks", v.integer())),
-            c.complete(c.directory(), c.option("-w", "--workdir")),
+            c.complete(c.values({ "1", "2", "4", "8", "16" }), c.option({ key = "tasks", aliases = { "-t", "--tasks" }, value = { schema = v.integer() } })),
+            c.complete(c.directory(), c.option({ key = "workdir", aliases = { "-w", "--workdir" }, value = { schema = v.string() } })),
 
             -- Dynamic context-aware completion: proposes job names based on parsed --tasks count
             c.complete(c.dynamic(function(ctx)
@@ -27,7 +25,7 @@ local CLI = c.create({
                     table.insert(jobs, string.format("job-%02d", i))
                 end
                 return jobs
-            end), c.arg("job_name", v.optional(v.string()))),
+            end), c.arg({ key = "job_name", schema = v.optional(v.string()), occurs = { min = 0, max = 1 } })),
 
             c.run(function(ctx)
                 ctx:log("info", string.format("Starting task execution with managed scope (tasks=%s, job=%s, workdir=%s)...",
@@ -70,7 +68,7 @@ local CLI = c.create({
 
         -- Subcommand: completion
         completion = c.node({
-            c.arg("shell", v.picklist({ "bash", "zsh", "fish", "powershell" })),
+            c.arg({ key = "shell", schema = v.picklist({ "bash", "zsh", "fish", "powershell" }) }),
 
             c.run(function(ctx)
                 local script = ctx.app:completion_script(ctx.args.shell, "runner")

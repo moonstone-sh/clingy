@@ -2,6 +2,7 @@ local util = require("clingy.util")
 local adapter = require("clingy.adapter")
 local named = require("clingy.named")
 local composed = require("clingy.composed")
+local form = require("clingy.form")
 
 local M = {}
 
@@ -227,6 +228,20 @@ function M.parse(graph, argv)
         local opt_name, attached_val, attached_separator_pos = named.split_attached_value(token, current_node.visible_options_by_name)
 
         local decl = current_node.visible_options_by_name[opt_name]
+        local form_offset = nil
+        if not decl then
+          local matches = {}
+          for alias, candidate in pairs(current_node.visible_options_by_name) do
+            if candidate.form and token:sub(1, #alias) == alias and #token > #alias then
+              table.insert(matches, { alias = alias, binding = candidate })
+            end
+          end
+          table.sort(matches, function(a, b) return #a.alias > #b.alias end)
+          if matches[1] then
+            opt_name, decl = matches[1].alias, matches[1].binding
+            form_offset = #opt_name + 1
+          end
+        end
 
         if decl then
           -- Check ordered mode constraint
@@ -266,6 +281,27 @@ function M.parse(graph, argv)
             local owner_seg = (decl.owner and route_segment_by_name[decl.owner]) or active_segment
             owner_seg.args[decl.result_key] = true
             i = i + 1
+
+          elseif decl.kind == "option" and decl.form then
+            local raw_fields, next_i = form.match(decl.form, argv, i, form_offset or #opt_name + 1)
+            if not raw_fields then error(string.format("Option '%s' does not match its declared form", opt_name)) end
+            local record = {}
+            local function validate_form(atom)
+              if atom._tag == "form_capture" and raw_fields[atom.key] ~= nil then
+                local ok, value = adapter.adapt_and_validate(raw_fields[atom.key], atom.schema, atom.key)
+                if not ok then error("Validation failed for form capture '" .. atom.key .. "'") end
+                record[atom.key] = value
+              elseif atom.parts then
+                for _, child in ipairs(atom.parts) do validate_form(child) end
+              elseif atom.part then validate_form(atom.part) end
+            end
+            validate_form(decl.form)
+            occurrence_counts[decl] = (occurrence_counts[decl] or 0) + 1
+            if not collected_values[decl] then collected_values[decl] = {} end
+            table.insert(collected_values[decl], record)
+            local owner_seg = (decl.owner and route_segment_by_name[decl.owner]) or active_segment
+            owner_seg.args[decl.result_key] = decl.aggregate == "array" and collected_values[decl] or record
+            i = next_i
 
           elseif decl.kind == "option" then
             local raw_val
@@ -387,8 +423,21 @@ function M.parse(graph, argv)
             local max = candidate.occurrence.max
 
             if max == nil or cnt < max then
-              matched_arg = candidate
-              break
+              -- A repeated structured form can be followed by another
+              -- positional only when the next token no longer matches its
+              -- own lexical shape.  Try transactionally before selecting it.
+              if candidate.form and cnt >= (candidate.occurrence.min or 0) then
+                local fields = form.match(candidate.form, argv, i)
+                if not fields then
+                  p_idx = p_idx + 1
+                else
+                  matched_arg = candidate
+                  break
+                end
+              else
+                matched_arg = candidate
+                break
+              end
             else
               p_idx = p_idx + 1
             end
@@ -424,7 +473,30 @@ function M.parse(graph, argv)
             ordered_cursor[active_segment] = matched_ord_idx
           end
 
-          if matched_arg.kind == "compose" then
+          if matched_arg.form then
+            local raw_fields, next_i = form.match(matched_arg.form, argv, i)
+            if not raw_fields then
+              error(string.format("Argument '%s' does not match its declared form", matched_arg.result_key))
+            end
+            local record = {}
+            local function validate_form(atom)
+              if atom._tag == "form_capture" and raw_fields[atom.key] ~= nil then
+                local ok, value = adapter.adapt_and_validate(raw_fields[atom.key], atom.schema, atom.key)
+                if not ok then error("Validation failed for form capture '" .. atom.key .. "'") end
+                record[atom.key] = value
+              elseif atom.parts then
+                for _, child in ipairs(atom.parts) do validate_form(child) end
+              elseif atom.part then
+                validate_form(atom.part)
+              end
+            end
+            validate_form(matched_arg.form)
+            occurrence_counts[matched_arg] = (occurrence_counts[matched_arg] or 0) + 1
+            if not collected_values[matched_arg] then collected_values[matched_arg] = {} end
+            table.insert(collected_values[matched_arg], record)
+            active_segment.args[matched_arg.result_key] = matched_arg.aggregate == "array" and collected_values[matched_arg] or record
+            i = next_i - 1
+          elseif matched_arg.kind == "compose" then
             local raw_captures = composed.match(token, matched_arg.composed_pattern)
             if not raw_captures then
               error(string.format("Composed argument '%s' does not match fixed pattern '%s'",
