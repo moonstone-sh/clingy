@@ -7,6 +7,9 @@ local response = require("clingy.completion.response")
 local context_mod = require("clingy.completion.context")
 local discovery = require("clingy.completion.discovery")
 local named = require("clingy.named")
+local form = require("clingy.form")
+local form_cursor = require("clingy.completion.form_cursor")
+local providers = require("clingy.completion.providers")
 
 local M = {}
 
@@ -54,64 +57,7 @@ function M.parse_partial(router, words, cword)
   local ordered_cursor = 1
   local in_passthrough = false
   local waiting_option = nil
-  local active_form_binding = nil
-
-  -- Returns the capture whose value begins at `offset` in an incomplete form.
-  -- Completion is deliberately prefix-oriented: a literal may be partially
-  -- present, but captures become eligible only after their preceding literals
-  -- have matched in full.
-  local function partial_form_capture(atom, word, offset)
-    if atom._tag == "form_capture" then return atom, offset end
-    if atom._tag == "form_literal" then
-      local remaining = word:sub(offset)
-      if #remaining < #atom.text and atom.text:sub(1, #remaining) == remaining then
-        return nil, offset + #remaining
-      end
-      if word:sub(offset, offset + #atom.text - 1) == atom.text then
-        return nil, offset + #atom.text
-      end
-      return false
-    end
-    if atom._tag == "form_sequence" then
-      local cursor = offset
-      for _, part in ipairs(atom.parts) do
-        local capture, next_offset = partial_form_capture(part, word, cursor)
-        if capture == false then return false end
-        if capture then return capture, next_offset end
-        cursor = next_offset
-        if cursor > #word + 1 then return nil, cursor end
-      end
-      return nil, cursor
-    end
-    if atom._tag == "form_choice" then
-      for _, part in ipairs(atom.parts) do
-        local capture, next_offset = partial_form_capture(part, word, offset)
-        if capture ~= false then return capture, next_offset end
-      end
-      return false
-    end
-    if atom._tag == "form_optional" then
-      local capture, next_offset = partial_form_capture(atom.part, word, offset)
-      if capture == false then return nil, offset end
-      return capture, next_offset
-    end
-    return false
-  end
-
-  local function capture_after_next_token(atom, seen_next_token)
-    if atom._tag == "form_next_token" then return nil, true end
-    if atom._tag == "form_capture" and seen_next_token then return atom, true end
-    if atom.parts then
-      for _, part in ipairs(atom.parts) do
-        local capture, seen = capture_after_next_token(part, seen_next_token)
-        if capture then return capture, seen end
-        seen_next_token = seen_next_token or seen
-      end
-    elseif atom.part then
-      return capture_after_next_token(atom.part, seen_next_token)
-    end
-    return nil, seen_next_token
-  end
+  local active_form = nil
 
   local function update_ordered_cursor(node, binding)
     if node.mode == "ordered" and node.declarations_order then
@@ -125,7 +71,8 @@ function M.parse_partial(router, words, cword)
   end
 
   -- Process completed tokens prior to cursor
-  for i = start_idx, cword - 1 do
+  local i = start_idx
+  while i < cword do
     local token = words[i]
     if token then
       if in_passthrough then
@@ -182,16 +129,29 @@ function M.parse_partial(router, words, cword)
           ordered_cursor = 1
         else
           -- Positional argument consumption
-          consumed_positionals = consumed_positionals + 1
-          local pos_binding = current_node.args and current_node.args[consumed_positionals]
+          local pos_binding = current_node.args and current_node.args[consumed_positionals + 1]
           if pos_binding then
-            if pos_binding.form then active_form_binding = pos_binding end
-            parsed_args[pos_binding.result_key] = token
-            update_ordered_cursor(current_node, pos_binding)
+            if pos_binding.form then
+              local fields, next_i = form.match(pos_binding.form, words, i)
+              if fields and next_i <= cword then
+                consumed_positionals = consumed_positionals + 1
+                parsed_args[pos_binding.result_key] = fields
+                update_ordered_cursor(current_node, pos_binding)
+                i = next_i - 1
+              else
+                active_form = { binding = pos_binding, start_word = i, start_offset = 1 }
+                i = cword - 1
+              end
+            else
+              consumed_positionals = consumed_positionals + 1
+              parsed_args[pos_binding.result_key] = token
+              update_ordered_cursor(current_node, pos_binding)
+            end
           end
         end
       end
     end
+    i = i + 1
   end
 
   -- Analyze word at cursor index
@@ -239,30 +199,34 @@ function M.parse_partial(router, words, cword)
     local next_pos = consumed_positionals + 1
     local pos_binding = current_node.args and current_node.args[next_pos]
 
-    if not pos_binding and active_form_binding then
-      local capture = capture_after_next_token(active_form_binding.form, false)
-      if capture then
+    if active_form then
+      local capture, capture_prefix, form_prefix, literal, literals = form_cursor.locate(
+        active_form.binding.form, words, active_form.start_word, active_form.start_offset, cword)
+      if capture or literal then
         target_binding = {
-          schema = capture.schema,
-          completion = capture.complete and { origin = "explicit", provider = capture.complete } or nil,
+          schema = capture and capture.schema or nil,
+          completion = literal and { origin = "explicit", provider = providers.values(literals or { literal }) }
+            or (capture.complete and { origin = "explicit", provider = capture.complete } or nil),
         }
         focus = M.FOCUS.POSITIONAL
-        prefix = current_word
+        prefix = capture_prefix
+        target_binding.form_prefix = form_prefix ~= "" and form_prefix or nil
       end
     end
 
     if not focus and pos_binding and pos_binding.form then
-      local capture, capture_offset = partial_form_capture(pos_binding.form, current_word, 1)
-      if capture then
+      local capture, capture_prefix, form_prefix, literal, literals = form_cursor.locate(pos_binding.form, words, cword, 1, cword)
+      if capture or literal then
         target_binding = {
-          schema = capture.schema,
-          completion = capture.complete and { origin = "explicit", provider = capture.complete } or nil,
+          schema = capture and capture.schema or nil,
+          completion = literal and { origin = "explicit", provider = providers.values(literals or { literal }) }
+            or (capture.complete and { origin = "explicit", provider = capture.complete } or nil),
         }
         focus = M.FOCUS.POSITIONAL
-        prefix = current_word:sub(capture_offset)
+        prefix = capture_prefix
         -- Keep the already-matched literal segment so rendered candidates are
         -- valid argv words rather than bare capture fragments.
-        target_binding.form_prefix = current_word:sub(1, capture_offset - 1)
+        target_binding.form_prefix = form_prefix ~= "" and form_prefix or nil
       end
     end
 
@@ -329,6 +293,18 @@ function M.resolve_candidates(parse_result)
     words = parse_result.words,
     cword = parse_result.cword,
   })
+
+  local function merge_provider_metadata(provider_response, replace_prefix)
+    for _, flag in pairs(response.DIRECTIVE) do
+      if flag ~= response.DIRECTIVE.DEFAULT and provider_response:has_directive(flag) then
+        resp:add_directive(flag)
+      end
+    end
+    if provider_response.filesystem then
+      resp.filesystem = provider_response.filesystem
+      resp.replace_prefix = replace_prefix or provider_response.replace_prefix or ""
+    end
+  end
 
   if focus == M.FOCUS.PASSTHROUGH then
     return resp
@@ -408,12 +384,12 @@ function M.resolve_candidates(parse_result)
           cand.value = inline_prefix .. cand.value
           resp:add(cand)
         end
-        resp.directive = p_resp.directive
+        merge_provider_metadata(p_resp, inline_prefix)
       else
         for _, cand in ipairs(p_resp.candidates) do
           resp:add(cand)
         end
-        resp.directive = p_resp.directive
+        merge_provider_metadata(p_resp)
       end
     end
     return resp
@@ -445,9 +421,7 @@ function M.resolve_candidates(parse_result)
           end
           resp:add(cand)
         end
-        if p_resp.directive and p_resp.directive ~= response.DIRECTIVE.DEFAULT then
-          resp.directive = p_resp.directive
-        end
+        merge_provider_metadata(p_resp, parse_result.target_binding.form_prefix)
       end
     end
   end

@@ -3,7 +3,7 @@
 Clingy resolves completion from the compiled command graph at tab time. Shell
 backends only translate requests and render candidates.
 
-The v0.3 contract covers:
+The completion contract covers:
 
 - structural command and alias completion;
 - declaration-local `complete` providers;
@@ -18,5 +18,5 @@ The v0.3 contract covers:
 Completion metadata may be placed on `c.arg`, `c.option`, `c.flag`, or
 `c.capture`. Explicit metadata wins over schema-derived candidates.
 
-The executable v0.3 checks live in `tests/new_api_spec.lua`. The packaged Bash
+The executable checks live in `tests/new_api_spec.lua`. The packaged shell
 bridge gate lives in `tests/packaged-completion.sh`.

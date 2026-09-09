@@ -8,6 +8,27 @@ local context_mod = require("clingy.completion.context")
 
 local M = {}
 
+local function normalize_extensions(opts)
+  opts = opts or {}
+  for key in pairs(opts) do
+    if key ~= "extensions" then error("c.file only accepts the 'extensions' option") end
+  end
+  local raw = opts.extensions
+  if raw == nil then return {} end
+  if type(raw) ~= "table" then error("completion extensions must be an array") end
+  local out, seen = {}, {}
+  for _, extension in ipairs(raw) do
+    if type(extension) ~= "string" then error("completion extensions must be strings") end
+    extension = extension:match("^%*%.(.+)$") or extension:match("^%.(.+)$") or extension
+    if extension == "" or not extension:match("^[%w%._+%-]+$") then
+      error("completion extension must be a bare suffix such as 'lua' or 'luax'")
+    end
+    if not seen[extension] then out[#out + 1], seen[extension] = extension, true end
+  end
+  table.sort(out)
+  return out
+end
+
 ---Constructs a static values completion provider.
 ---@param ... any Table of values/candidates or vararg strings/tables
 ---@return table Provider
@@ -44,32 +65,36 @@ function M.values(...)
 end
 
 ---Constructs a generic path completion provider.
----@param opts? { extensions?: string[], pattern?: string }
+---@param opts? table
 ---@return table Provider
 function M.path(opts)
   opts = opts or {}
+  if next(opts) ~= nil then error("c.path does not accept options") end
   return {
     _tag = "completion_provider",
     kind = "path",
     opts = opts,
     resolve = function(self, ctx)
       local resp = response.create(nil, response.DIRECTIVE.FILENAMES)
+      resp:set_filesystem("path")
       return resp
     end,
   }
 end
 
 ---Constructs a file completion provider.
----@param opts? { extensions?: string[], pattern?: string }
+---@param opts? { extensions?: string[] }
 ---@return table Provider
 function M.file(opts)
   opts = opts or {}
+  local extensions = normalize_extensions(opts)
   return {
     _tag = "completion_provider",
     kind = "file",
-    opts = opts,
+    opts = { extensions = extensions },
     resolve = function(self, ctx)
       local resp = response.create(nil, response.DIRECTIVE.FILENAMES)
+      resp:set_filesystem("file", self.opts)
       return resp
     end,
   }
@@ -80,12 +105,15 @@ end
 ---@return table Provider
 function M.directory(opts)
   opts = opts or {}
+  if next(opts) ~= nil then error("c.directory does not accept options") end
   return {
     _tag = "completion_provider",
     kind = "directory",
     opts = opts,
     resolve = function(self, ctx)
       local resp = response.create(nil, response.DIRECTIVE.DIRECTORIES)
+      resp:add_directive(response.DIRECTIVE.NO_SPACE)
+      resp:set_filesystem("directory")
       return resp
     end,
   }

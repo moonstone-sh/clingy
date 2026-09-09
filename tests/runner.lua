@@ -3,8 +3,8 @@ package.path = "./src/?.lua;./src/?/init.lua;./?.lua;./?/init.lua;./.moonstone/e
 
 local h = require("tests.harness")
 
--- v0.3 is a deliberate DSL break. This runner is the executable contract for
--- table declarations, forms, and completion behavior.
+-- This runner is the executable contract for table declarations, forms, and
+-- completion behavior.
 local suites = {
   "tests.new_api_spec",
   "tests.cli.init_spec",
@@ -29,7 +29,7 @@ local suites = {
 }
 
 print("=========================================================")
-print("Running Clingy v0.3 table-form API test suite")
+print("Running Clingy table-form API test suite")
 print("=========================================================")
 
 for _, suite_name in ipairs(suites) do

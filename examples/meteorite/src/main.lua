@@ -72,7 +72,7 @@ local CLI = c.create({
 		-- 'build' subcommand with repeated options and completions
 		build = c.node({
 			c.option({ key = "define", aliases = { "-D", "--define" }, value = { schema = Define }, occurs = { min = 0, max = "many" }, complete = c.values({ "ENV=development", "ENV=production", "PORT=8080", "DEBUG=true" }) }),
-			c.option({ key = "config", aliases = { "-c", "--config" }, complete = c.file({ "*.lua" }) }),
+			c.option({ key = "config", aliases = { "-c", "--config" }, complete = c.file({ extensions = { "lua" } }) }),
 			c.option({ key = "output_dir", aliases = { "-o", "--output-dir" }, complete = c.directory() }),
 
 			c.run(function(ctx)

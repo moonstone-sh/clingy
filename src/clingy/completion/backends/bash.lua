@@ -3,7 +3,7 @@
   Bash shell completion integration and candidate renderer.
 ]]
 
-local response = require("clingy.completion.response")
+local protocol = require("clingy.completion.protocol")
 
 local M = {}
 
@@ -13,12 +13,17 @@ local M = {}
 ---@return string
 function M.script(app_name, cmd_path)
   cmd_path = cmd_path or app_name
+  local function shell_quote(value)
+    return "'" .. tostring(value):gsub("'", "'\"'\"'") .. "'"
+  end
+  local encoded_name = app_name:gsub(".", function(ch) return string.format("%02x", string.byte(ch)) end)
+  local function_name = "__clingy_" .. encoded_name .. "_complete"
   return string.format([=[
 # bash completion for %s -*- shell-script -*-
-__%s_complete() {
+%s() {
     local cur prev words cword
-    if type _init_completion >/dev/null 2>&1; then
-        _init_completion -n = 2>/dev/null
+    if type _init_completion >/dev/null 2>&1 && _init_completion -n =: 2>/dev/null; then
+        :
     else
         cur="${COMP_WORDS[COMP_CWORD]}"
         prev="${COMP_WORDS[COMP_CWORD-1]}"
@@ -28,6 +33,7 @@ __%s_complete() {
     # Clingy's completion API uses Lua's 1-based word indices.
     cword=$((cword + 1))
 
+    COMPREPLY=()
     local output
     output=$(%s --__clingy-complete bash "${words[@]}" --cword="$cword" 2>/dev/null)
     local exit_code=$?
@@ -35,57 +41,79 @@ __%s_complete() {
         return $exit_code
     fi
 
-    local IFS=$'\n'
-    local lines
-    read -d '' -ra lines <<< "$output" || true
+    local record first second third fourth
+    local directive="-" filesystem="-" replace_prefix="-" extensions="-"
+    while IFS=$'\t' read -r record first second third fourth; do
+        if [[ "$record" == C ]]; then
+            COMPREPLY+=("$first")
+        elif [[ "$record" == D ]]; then
+            directive="$first"
+            filesystem="$second"
+            replace_prefix="$third"
+            extensions="$fourth"
+        fi
+    done <<< "$output"
 
-    for line in "${lines[@]}"; do
-        if [[ "$line" == :directive:* ]]; then
-            local directive="${line#:directive:}"
+    if [[ "$directive" != - || "$filesystem" != - ]]; then
+        if [[ "$replace_prefix" == - ]]; then replace_prefix=""; fi
+        if [[ "$extensions" == - ]]; then extensions=""; fi
+        if [[ "$filesystem" != - ]]; then
+            local search="$cur"
+            if [[ -n "$replace_prefix" && "$search" == "$replace_prefix"* ]]; then
+                search="${search#"$replace_prefix"}"
+            fi
+            local -a paths
+            local path ext allowed
+            if [[ "$filesystem" == directory ]]; then
+                while IFS= read -r path; do paths+=("$path"); done < <(compgen -d -- "$search")
+            else
+                while IFS= read -r path; do paths+=("$path"); done < <(compgen -f -- "$search")
+            fi
+            for path in "${paths[@]}"; do
+                allowed=1
+                if [[ "$filesystem" == file && ! -d "$path" && -n "$extensions" ]]; then
+                    allowed=0
+                    ext="${path##*.}"
+                    local -a wanted
+                    IFS=',' read -ra wanted <<< "$extensions"
+                    local wanted_ext
+                    for wanted_ext in "${wanted[@]}"; do
+                        [[ "$ext" == "$wanted_ext" ]] && allowed=1
+                    done
+                fi
+                if [[ $allowed -eq 1 ]]; then
+                    if [[ -d "$path" ]]; then path="${path%%/}/"; fi
+                    COMPREPLY+=("$replace_prefix$path")
+                fi
+            done
+            compopt -o filenames 2>/dev/null || true
+        fi
+
+        if [[ "$directive" != - ]]; then
             if [[ "$directive" == *"filenames"* ]]; then
-                compopt -o filenames 2>/dev/null
+                compopt -o filenames 2>/dev/null || true
             fi
             if [[ "$directive" == *"nospace"* ]]; then
-                compopt -o nospace 2>/dev/null
+                compopt -o nospace 2>/dev/null || true
             fi
             if [[ "$directive" == *"dirnames"* ]]; then
-                compopt -o dirnames 2>/dev/null
+                compopt -o dirnames 2>/dev/null || true
             fi
-        elif [[ -n "$line" ]]; then
-            COMPREPLY+=("$line")
+            if [[ "$directive" == *"nofiles"* ]]; then
+                compopt +o default 2>/dev/null || true
+            fi
         fi
-    done
+    fi
 }
-complete -o default -F __%s_complete %s
-]=], app_name, app_name, cmd_path, app_name, app_name)
+complete -o default -F %s %s
+]=], app_name, function_name, shell_quote(cmd_path), function_name, shell_quote(app_name))
 end
 
 ---Renders a CompletionResponse into formatted output lines for bash.
 ---@param resp table CompletionResponse
 ---@return string
 function M.render(resp)
-  local lines = {}
-
-  local dir_parts = {}
-  if resp:has_directive(response.DIRECTIVE.FILENAMES) then
-    table.insert(dir_parts, "filenames")
-  end
-  if resp:has_directive(response.DIRECTIVE.DIRECTORIES) then
-    table.insert(dir_parts, "dirnames")
-  end
-  if resp:has_directive(response.DIRECTIVE.NO_SPACE) then
-    table.insert(dir_parts, "nospace")
-  end
-
-  if #dir_parts > 0 then
-    table.insert(lines, ":directive:" .. table.concat(dir_parts, ","))
-  end
-
-  for _, cand in ipairs(resp.candidates or {}) do
-    table.insert(lines, cand.value)
-  end
-
-  return table.concat(lines, "\n")
+  return protocol.render(resp, false)
 end
 
 return M

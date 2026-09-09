@@ -6,25 +6,32 @@ Shell bridges invoke the application through a hidden endpoint:
 <binary> --__clingy-complete <shell> <words...> --cword=<index>
 ```
 
-`shell` is `bash`, `zsh`, `fish`, or `powershell`. `words` includes the binary
-name and the current, possibly empty, word. `cword` is the 1-based index of the
-current word. The generated bridges translate their shell's cursor convention
-to this contract; Bash therefore adds one to `COMP_CWORD`.
+`words` is the command line through the cursor, including the executable. An
+empty active word may be omitted as long as `cword` points one position past
+the supplied words. `cword` is 1-based. Bridges remove shell quoting from
+completed words and preserve the active word's insertion prefix.
 
 The endpoint runs before parsing, handlers, lifecycle stages, and presentation.
-It writes only completion records to standard output and returns zero when a
-provider cannot produce candidates.
+Protocol version 2 uses typed, tab-separated records:
 
-Candidate records are line-oriented:
+```text
+V<TAB>2
+D<TAB>filenames,nospace<TAB>file<TAB>--config=<TAB>lua,luax
+C<TAB>--config=src/main.lua<TAB>Lua entry point
+```
 
-- Bash: value only.
-- Zsh: `value:description`, with colons escaped in descriptions.
-- Fish and PowerShell: `value<TAB>description`.
+- `V` declares the protocol version.
+- `C` carries an insertion value and optional description.
+- `D` carries directives, filesystem kind, replacement prefix, and allowed
+  extensions. `-` means the field is absent.
 
-An optional `:directive:` record precedes candidates. The supported directives
-are `filenames`, `dirnames`, and `nospace`. They request shell-native file or
-directory completion and suppress the trailing space where appropriate.
+The directives are `filenames`, `dirnames`, `nofiles`, and `nospace`.
+Filesystem kind is `path`, `file`, or `directory`.
 
-`App:complete({ words = ..., cword = ... })` uses the same 1-based word model.
-It returns the structured response before shell rendering. `App:completion_script`
-and `c.completion.completion_script` generate the bridges.
+Colons, spaces, quotes, and backslashes are ordinary field content. Candidate
+values cannot contain NUL, tab, CR, or LF because those bytes delimit records;
+descriptions normalize those control characters to spaces.
+
+`App:complete({ words = ..., cword = ... })` returns the structured response
+before rendering. `App:completion_script` and
+`c.completion.completion_script` generate the shell bridges.

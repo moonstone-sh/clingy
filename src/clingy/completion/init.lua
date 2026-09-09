@@ -8,6 +8,7 @@ local context_mod = require("clingy.completion.context")
 local providers = require("clingy.completion.providers")
 local discovery = require("clingy.completion.discovery")
 local partial_parser = require("clingy.completion.partial_parser")
+local protocol = require("clingy.completion.protocol")
 
 local backends = {
   bash = require("clingy.completion.backends.bash"),
@@ -23,6 +24,7 @@ local M = {
   providers = providers,
   discovery = discovery,
   partial_parser = partial_parser,
+  protocol = protocol,
   backends = backends,
 }
 
@@ -68,6 +70,9 @@ function M.completion_script(app_or_router, shell, cmd_path)
     app_name = app_or_router
   elseif type(app_or_router) == "table" then
     app_name = app_or_router.name or (app_or_router._graph and app_or_router._graph.name) or "cli"
+  end
+  if not app_name:match("^[%w%._+%-]+$") then
+    error("completion command name may only contain letters, digits, '.', '_', '+', and '-'")
   end
   local backend = backends[shell]
   if not backend then

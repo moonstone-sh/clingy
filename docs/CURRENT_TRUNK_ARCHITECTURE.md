@@ -137,4 +137,5 @@ moon exec lua benchmarks/bench.lua
 
 The release workflow also runs `moon run test-packaged-completion`, which
 installs a Ballad-built CLI and its declared Lua runtime into a fresh Moonstone
-project before exercising the generated Bash completion bridge.
+project before exercising chained values and filesystem filters through the
+generated Bash, Zsh, Fish, and PowerShell bridges.

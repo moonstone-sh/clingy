@@ -147,6 +147,10 @@ Its public provider constructors are `c.values`, `c.path`, `c.file`,
 `c.directory`, `c.dynamic`, and `c.none`. Assign one to the `complete` field of
 `c.arg`, `c.option`, `c.flag`, or `c.capture`.
 
+`c.file({ extensions = { "lua", "luax" } })` applies the same suffix filter in
+Bash, Zsh, Fish, and PowerShell. Filesystem completion also works after an
+attached prefix such as `--config=` or a form literal such as `argument:`.
+
 ## API map
 
 The public API is intentionally small enough to scan:

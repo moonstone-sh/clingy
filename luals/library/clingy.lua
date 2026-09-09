@@ -391,12 +391,19 @@ function c.schema_adapter(adapter) end
 ---@field display? string
 ---@field directive? integer
 
+---@class clingy.CompletionFilesystem
+---@field kind "path"|"file"|"directory"
+---@field extensions string[]
+
 ---@class clingy.CompletionResponse
 ---@field candidates clingy.CompletionCandidate[]
 ---@field directive integer
+---@field filesystem? clingy.CompletionFilesystem
+---@field replace_prefix string
 ---@field add fun(self: clingy.CompletionResponse, val_or_table: string|table, description?: string, directive?: integer): clingy.CompletionResponse
 ---@field add_directive fun(self: clingy.CompletionResponse, flag: integer): clingy.CompletionResponse
 ---@field has_directive fun(self: clingy.CompletionResponse, flag: integer): boolean
+---@field set_filesystem fun(self: clingy.CompletionResponse, kind: "path"|"file"|"directory", opts?: { extensions?: string[] }): clingy.CompletionResponse
 ---@field filter_by_prefix fun(self: clingy.CompletionResponse, prefix?: string): clingy.CompletionResponse
 ---@field sort fun(self: clingy.CompletionResponse): clingy.CompletionResponse
 
@@ -422,12 +429,12 @@ function c.schema_adapter(adapter) end
 function c.values(...) end
 
 ---Constructs a generic path completion provider.
----@param opts? { extensions?: string[], pattern?: string }
+---@param opts? table
 ---@return clingy.CompletionProvider
 function c.path(opts) end
 
 ---Constructs a file completion provider.
----@param opts? { extensions?: string[], pattern?: string }
+---@param opts? { extensions?: string[] }
 ---@return clingy.CompletionProvider
 function c.file(opts) end
 

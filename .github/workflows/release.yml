@@ -39,7 +39,7 @@ jobs:
       - name: Install release tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y b3sum file jq libsqlite3-dev lsof pkg-config zstd
+          sudo apt-get install -y b3sum file fish jq libsqlite3-dev lsof pkg-config zsh zstd
       - name: Build Moonstone CLI
         working-directory: .ci/moonstone
         run: |
@@ -49,8 +49,8 @@ jobs:
         run: moon sync
       - name: Test library contract
         run: moon run test
-      - name: Test packaged Bash completion
-        run: moon run test-packaged-completion
+      - name: Test packaged shell completion
+        run: CLINGY_REQUIRE_ALL_SHELLS=1 moon run test-packaged-completion
       - name: Export tagged project
         run: moon exec ballad play partiture.lua
       - name: Verify portable executable artifact

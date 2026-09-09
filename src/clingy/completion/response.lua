@@ -40,16 +40,25 @@ end
 ---@param directive? integer
 ---@return table
 function M.candidate(val_or_table, description, directive)
+  local function checked_value(value)
+    value = tostring(value or "")
+    if value:find("[%z\r\n\t]") then
+      error("completion candidate values cannot contain NUL, tab, CR, or LF")
+    end
+    return value
+  end
+
   if type(val_or_table) == "table" then
     return {
-      value = tostring(val_or_table.value or val_or_table[1] or ""),
+      value = checked_value(val_or_table.value or val_or_table[1]),
       description = val_or_table.description or val_or_table.desc or val_or_table[2],
       display = val_or_table.display,
+      kind = val_or_table.kind,
       directive = val_or_table.directive or directive or 0,
     }
   end
   return {
-    value = tostring(val_or_table or ""),
+    value = checked_value(val_or_table),
     description = description,
     directive = directive or 0,
   }
@@ -66,6 +75,21 @@ ResponseMethods.__index = ResponseMethods
 function ResponseMethods:add(val_or_table, description, directive)
   local cand = M.candidate(val_or_table, description, directive)
   table.insert(self.candidates, cand)
+  if cand.directive and cand.directive ~= M.DIRECTIVE.DEFAULT then
+    self.directive = M.add_directive(self.directive, cand.directive)
+  end
+  return self
+end
+
+---Requests shell-native filesystem completion.
+---@param kind "path"|"file"|"directory"
+---@param opts? { extensions?: string[] }
+---@return table self
+function ResponseMethods:set_filesystem(kind, opts)
+  self.filesystem = {
+    kind = kind,
+    extensions = opts and opts.extensions or {},
+  }
   return self
 end
 
@@ -120,6 +144,8 @@ function M.create(candidates, directive)
     _tag = "completion_response",
     candidates = {},
     directive = directive or M.DIRECTIVE.DEFAULT,
+    filesystem = nil,
+    replace_prefix = "",
   }, ResponseMethods)
 
   if candidates then

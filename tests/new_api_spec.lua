@@ -4,7 +4,7 @@ local v = require("valua")
 
 local describe, it, assert = h.describe, h.it, h.assert
 
-describe("v0.3 table declarations and forms", function()
+describe("table declarations and forms", function()
   it("does not expose removed declaration wrappers", function()
     for _, name in ipairs({ "define", "compose", "label", "separator", "required", "repeated", "complete", "end", "end_", "c" }) do
       assert.is_nil(c[name], "removed c." .. name)
@@ -69,6 +69,62 @@ describe("v0.3 table declarations and forms", function()
     })) })
     local response = app:complete({ words = { "tool", "dev:alice", "i" }, cword = 3 })
     assert.equal(response.candidates[1].value, "inherit")
+  end)
+
+  it("tracks completion through multiple token boundaries and later arguments", function()
+    local app = c.create({ name = "tool", c.root(c.node({
+      c.arg({ key = "spec", form = c.sequence({
+        c.literal({ text = "dev:" }),
+        c.capture({ key = "user", schema = v.string(), complete = c.values({ "alice" }) }),
+        c.next_token(),
+        c.literal({ text = "org:" }),
+        c.capture({ key = "org", schema = v.string(), complete = c.values({ "moonstone" }) }),
+        c.next_token(),
+        c.capture({ key = "mode", schema = v.string(), complete = c.values({ "inherit" }) }),
+      }) }),
+      c.arg({ key = "path", schema = v.string(), complete = c.file({ extensions = { "luax" } }) }),
+    })) })
+
+    local first_literal = app:complete({ words = { "tool", "de" }, cword = 2 })
+    assert.equal(first_literal.candidates[1].value, "dev:")
+    local second_literal = app:complete({ words = { "tool", "dev:alice", "or" }, cword = 3 })
+    assert.equal(second_literal.candidates[1].value, "org:")
+    local org = app:complete({ words = { "tool", "dev:alice", "org:m" }, cword = 3 })
+    assert.equal(org.candidates[1].value, "org:moonstone")
+    local mode = app:complete({ words = { "tool", "dev:alice", "org:moonstone", "i" }, cword = 4 })
+    assert.equal(mode.candidates[1].value, "inherit")
+    local path = app:complete({ words = { "tool", "dev:alice", "org:moonstone", "inherit", "file.lu" }, cword = 5 })
+    assert.equal(path.filesystem.kind, "file")
+    assert.equal(path.filesystem.extensions[1], "luax")
+  end)
+
+  it("preserves attached and form prefixes for filesystem completion", function()
+    local app = c.create({ name = "tool", c.root(c.node({
+      c.option({ key = "config", aliases = { "--config" }, complete = c.file({ extensions = { "luax" } }) }),
+      c.arg({ key = "source", form = c.sequence({
+        c.literal({ text = "argument:" }),
+        c.capture({ key = "path", schema = v.string(), complete = c.file({ extensions = { "luax" } }) }),
+      }) }),
+    })) })
+    local attached = app:complete({ words = { "tool", "--config=src/ma" }, cword = 2 })
+    assert.equal(attached.replace_prefix, "--config=")
+    assert.equal(attached.filesystem.kind, "file")
+    local formed = app:complete({ words = { "tool", "argument:src/ma" }, cword = 2 })
+    assert.equal(formed.replace_prefix, "argument:")
+    assert.equal(formed.filesystem.extensions[1], "luax")
+  end)
+
+  it("completes every compatible literal branch of a form choice", function()
+    local app = c.create({ name = "tool", c.root(c.node({
+      c.arg({ key = "target", form = c.choice({
+        c.sequence({ c.literal({ text = "dev:database=" }), c.capture({ key = "value", schema = v.string() }) }),
+        c.sequence({ c.literal({ text = "dev:org=" }), c.capture({ key = "value", schema = v.string() }) }),
+        c.sequence({ c.literal({ text = "prod:user=" }), c.capture({ key = "value", schema = v.string() }) }),
+      }) }),
+    })) })
+    local response = app:complete({ words = { "tool", "dev:" }, cword = 2 })
+    assert.equal(response.candidates[1].value, "dev:database=")
+    assert.equal(response.candidates[2].value, "dev:org=")
   end)
 
   it("rejects malformed table aliases", function()
