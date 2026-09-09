@@ -34,7 +34,7 @@ moon registry push "$registry" \
 (
   cd "$project"
   moon registry add --name local --url "$registry"
-  moon add moonstone/clingy-example@0.3.0 --bin
+  moon add moonstone/clingy-example@0.3.0 --bin --prefer-local
 )
 
 export PATH="$project/.moonstone/env/bin:$PATH"
