@@ -20,11 +20,9 @@ function M.script(app_name, cmd_path)
   return string.format([=[
 function %s
     set -l cmd (commandline -cop)
-    set -l cword (count $cmd)
-    if test (count $cmd) -gt 0; and test (string length -- (commandline -ct)) -eq 0
-        set cword (math $cword + 1)
-    end
-    set -l raw (%s --__clingy-complete fish $cmd --cword=$cword 2>/dev/null)
+    set -l current (commandline -ct)
+    set -l cword (math (count $cmd) + 1)
+    set -l raw (%s --__clingy-complete fish $cmd "$current" --cword=$cword 2>/dev/null)
     set -l filesystem -
     set -l replace_prefix -
     set -l extensions -
@@ -46,7 +44,6 @@ function %s
     end
 
     if test "$filesystem" != -
-        set -l current (commandline -ct)
         if test "$replace_prefix" = -
             set replace_prefix ''
         end
