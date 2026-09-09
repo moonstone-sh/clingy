@@ -13,6 +13,7 @@ abi = "5.4"
 
 [scripts]
 test = "lua tests/runner.lua"
+test-packaged-completion = "bash tests/packaged-completion.sh"
 dev = "lua ./src/main.lua \"$@\""
 package = "moon exec ballad -- play partiture.lua"
 

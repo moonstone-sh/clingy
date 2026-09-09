@@ -14,18 +14,18 @@ local CLI = c.create({
         c.inherit({ c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }) }),
 
         worker = c.node({
-            c.complete(c.values({ "1", "2", "4", "8", "16" }), c.option({ key = "tasks", aliases = { "-t", "--tasks" }, value = { schema = v.integer() } })),
-            c.complete(c.directory(), c.option({ key = "workdir", aliases = { "-w", "--workdir" }, value = { schema = v.string() } })),
+            c.option({ key = "tasks", aliases = { "-t", "--tasks" }, value = { schema = v.integer() }, complete = c.values({ "1", "2", "4", "8", "16" }) }),
+            c.option({ key = "workdir", aliases = { "-w", "--workdir" }, value = { schema = v.string() }, complete = c.directory() }),
 
             -- Dynamic context-aware completion: proposes job names based on parsed --tasks count
-            c.complete(c.dynamic(function(ctx)
+            c.arg({ key = "job_name", schema = v.optional(v.string()), occurs = { min = 0, max = 1 }, complete = c.dynamic(function(ctx)
                 local count = tonumber(ctx.args.tasks) or 4
                 local jobs = {}
                 for i = 1, count do
                     table.insert(jobs, string.format("job-%02d", i))
                 end
                 return jobs
-            end), c.arg({ key = "job_name", schema = v.optional(v.string()), occurs = { min = 0, max = 1 } })),
+            end) }),
 
             c.run(function(ctx)
                 ctx:log("info", string.format("Starting task execution with managed scope (tasks=%s, job=%s, workdir=%s)...",

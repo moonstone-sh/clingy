@@ -88,7 +88,7 @@ consumes a detached value.
 - `c.node`, `c.inherit`, `c.arg`, `c.option`, and `c.flag` for routing.
 - `c.sequence`, `c.choice`, `c.literal`, `c.capture`, and `c.next_token` for value forms.
 - `c.interspersed`, `c.leading`, `c.ordered`, and `c.short_clusters` for parser policy.
-- Valua schema adaptation, schema-driven completion, structured scopes,
+- Valua schema adaptation, declaration-local completion, structured scopes,
   subprocess supervision, signals, help, and NDJSON presentation.
 
 See the repository [README](README.md) for the DSL overview and

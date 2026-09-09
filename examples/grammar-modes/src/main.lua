@@ -15,9 +15,9 @@ local CLI = c.create({
         -- Options may appear anywhere relative to positionals
         inter = c.node({
             c.interspersed(),
-            c.complete(c.file(), c.arg({ key = "src", schema = v.string() })),
-            c.complete(c.path(), c.arg({ key = "dst", schema = v.string() })),
-            c.complete(c.values({ "copy", "move", "link" }), c.option({ key = "action", aliases = { "-a", "--action" }, value = { schema = v.string() } })),
+            c.arg({ key = "src", schema = v.string(), complete = c.file() }),
+            c.arg({ key = "dst", schema = v.string(), complete = c.path() }),
+            c.option({ key = "action", aliases = { "-a", "--action" }, value = { schema = v.string() }, complete = c.values({ "copy", "move", "link" }) }),
             c.flag({ key = "force", aliases = { "-f", "--force" } }),
 
             c.run(function(ctx)
@@ -29,9 +29,9 @@ local CLI = c.create({
         -- Mode 2: Leading (options must precede positionals)
         leading = c.node({
             c.leading(),
-            c.complete(c.file(), c.arg({ key = "src", schema = v.string() })),
-            c.complete(c.path(), c.arg({ key = "dst", schema = v.string() })),
-            c.complete(c.values({ "fast", "safe", "strict" }), c.option({ key = "mode", aliases = { "-m", "--mode" }, value = { schema = v.string() } })),
+            c.arg({ key = "src", schema = v.string(), complete = c.file() }),
+            c.arg({ key = "dst", schema = v.string(), complete = c.path() }),
+            c.option({ key = "mode", aliases = { "-m", "--mode" }, value = { schema = v.string() }, complete = c.values({ "fast", "safe", "strict" }) }),
             c.flag({ key = "force", aliases = { "-f", "--force" } }),
 
             c.run(function(ctx)
@@ -44,9 +44,9 @@ local CLI = c.create({
         ordered = c.node({
             c.ordered(),
             c.flag({ key = "prepare", aliases = { "--prepare" } }),
-            c.complete(c.file(), c.arg({ key = "input", schema = v.string() })),
+            c.arg({ key = "input", schema = v.string(), complete = c.file() }),
             c.flag({ key = "commit", aliases = { "--commit" } }),
-            c.complete(c.path(), c.arg({ key = "output", schema = v.string() })),
+            c.arg({ key = "output", schema = v.string(), complete = c.path() }),
 
             c.run(function(ctx)
                 ctx:log("info", string.format("[Ordered] prepare=%s input=%s commit=%s output=%s",

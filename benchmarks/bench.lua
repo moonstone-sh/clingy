@@ -28,18 +28,18 @@ local function make_cli_config()
     version = "1.0.0",
     c.root(c.node({
       c.inherit(
-        c.flag("-v", "--verbose"),
-        c.flag("-q", "--quiet"),
-        c.flag("--json")
+        c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }),
+        c.flag({ key = "quiet", aliases = { "-q", "--quiet" } }),
+        c.flag({ key = "json", aliases = { "--json" } })
       ),
       deploy = c.node({
-        c.arg("env", v.picklist({ "staging", "prod" })),
-        c.option("-r", "--replicas", v.integer()),
-        c.repeated(c.option("-D", "--define", v.string())),
+        c.arg({ key = "env", schema = v.picklist({ "staging", "prod" }) }),
+        c.option({ key = "replicas", aliases = { "-r", "--replicas" }, value = { schema = v.integer() } }),
+        c.option({ key = "define", aliases = { "-D", "--define" }, value = { schema = v.string() }, occurs = { min = 0, max = "many" } }),
       }),
       build = c.node({
-        c.flag("-f", "--force"),
-        c.arg("target", v.string()),
+        c.flag({ key = "force", aliases = { "-f", "--force" } }),
+        c.arg({ key = "target", schema = v.string() }),
       }),
     })),
   }
@@ -69,11 +69,11 @@ local tar_app = c.create({
   name = "tar",
   c.root(c.node({
     c.short_clusters(),
-    c.flag("-x", "--extract"),
-    c.flag("-f", "--force"),
-    c.flag("-v", "--verbose"),
-    c.flag("-z", "--gzip"),
-    c.arg("archive", v.string()),
+    c.flag({ key = "extract", aliases = { "-x", "--extract" } }),
+    c.flag({ key = "force", aliases = { "-f", "--force" } }),
+    c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }),
+    c.flag({ key = "gzip", aliases = { "-z", "--gzip" } }),
+    c.arg({ key = "archive", schema = v.string() }),
   })),
 })
 local cluster_argv = { "-xfvz", "bundle.tar.gz" }
@@ -87,10 +87,10 @@ local legacy_app = c.create({
   name = "legacy",
   c.root(c.node({
     c.ordered(),
-    c.flag("--prepare"),
-    c.arg("source", v.string()),
-    c.flag("--commit"),
-    c.arg("destination", v.string()),
+    c.flag({ key = "prepare", aliases = { "--prepare" } }),
+    c.arg({ key = "source", schema = v.string() }),
+    c.flag({ key = "commit", aliases = { "--commit" } }),
+    c.arg({ key = "destination", schema = v.string() }),
   })),
 })
 local ordered_argv = { "--prepare", "in.dat", "--commit", "out.dat" }

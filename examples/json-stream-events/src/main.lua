@@ -18,14 +18,14 @@ local CLI = c.create({
 
         compile = c.node({
             c.arg({ key = "target", schema = v.picklist({ "web", "desktop", "native" }) }),
-            c.complete(c.directory(), c.option({ key = "output", aliases = { "-o", "--output" }, value = { schema = v.string() } })),
-            c.complete(c.values({
+            c.option({ key = "output", aliases = { "-o", "--output" }, value = { schema = v.string() }, complete = c.directory() }),
+            c.option({ key = "profile", aliases = { "-p", "--profile" }, value = { schema = v.string() }, complete = c.values({
                 { value = "debug", description = "Unoptimized build with debug symbols" },
                 { value = "release", description = "Standard optimized release build" },
                 { value = "release-small", description = "Size-optimized binary" },
                 { value = "release-fast", description = "Aggressive speed-optimized binary" },
-            }), c.option({ key = "profile", aliases = { "-p", "--profile" }, value = { schema = v.string() } })),
-            c.complete(c.none(), c.option({ key = "secret_token", aliases = { "--secret-token" }, value = { schema = v.string() } })),
+            }) }),
+            c.option({ key = "secret_token", aliases = { "--secret-token" }, value = { schema = v.string() }, complete = c.none() }),
 
             c.run(function(ctx)
                 ctx:span("compilation", function()

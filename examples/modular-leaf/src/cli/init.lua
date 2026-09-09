@@ -4,8 +4,8 @@ local shared_output = require("cli.shared.output")
 
 return c.node({
     shared_output,
-    c.complete(c.directory(), c.arg({ key = "dirname", schema = v.string() })),
-    c.complete(c.values({ "starter", "standard", "enterprise" }), c.option({ key = "template", aliases = { "-t", "--template" } })),
+    c.arg({ key = "dirname", schema = v.string(), complete = c.directory() }),
+    c.option({ key = "template", aliases = { "-t", "--template" }, complete = c.values({ "starter", "standard", "enterprise" }) }),
     c.flag({ key = "force", aliases = { "-f", "--force" } }),
 
     c.run(function(ctx)

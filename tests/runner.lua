@@ -3,10 +3,30 @@ package.path = "./src/?.lua;./src/?/init.lua;./?.lua;./?/init.lua;./.moonstone/e
 
 local h = require("tests.harness")
 
--- v0.3 is a deliberate DSL break.  The old invariant suite specifies removed
--- declaration wrappers and is retained only as historical reference; this
--- runner is the executable contract for table declarations and forms.
-local suites = { "tests.new_api_spec" }
+-- v0.3 is a deliberate DSL break. This runner is the executable contract for
+-- table declarations, forms, and completion behavior.
+local suites = {
+  "tests.new_api_spec",
+  "tests.cli.init_spec",
+  "tests.completion.backends_spec",
+  "tests.invariants.inv_17_18_lifecycle_process_spec",
+  "tests.invariants.inv_19_signals_spec",
+  "tests.invariants.inv_20_21_composer_plain_spec",
+  "tests.invariants.inv_22_control_ipc_spec",
+  "tests.invariants.inv_23_deterministic_unwind_spec",
+  "tests.invariants.inv_signals_escalation_spec",
+  "tests.presentation.composer_host_spec",
+  "tests.presentation.custom_host_spec",
+  "tests.presentation.error_containment_spec",
+  "tests.presentation.event_ingestion_spec",
+  "tests.presentation.performance_spec",
+  "tests.presentation.prompt_protocol_spec",
+  "tests.presentation.scope_deferral_spec",
+  "tests.presentation.signals_handoff_spec",
+  "tests.presentation.subprocess_handoff_spec",
+  "tests.presentation.test_hosts_spec",
+  "tests.substrate.composer_synthetic_spec",
+}
 
 print("=========================================================")
 print("Running Clingy v0.3 table-form API test suite")

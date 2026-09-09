@@ -125,13 +125,16 @@ Clingy routes all output through a single `Composer` instance initialized for th
 
 ---
 
-## 7. Performance & Verification Sanity
+## 7. Verification
 
-Running the performance benchmark suite (`benchmarks/bench.lua`) on Apple Silicon yields:
-- **CLI Compilation (`c.create`)**: ~13,700 operations/sec.
-- **Simple Invocation Parsing**: ~113,400 operations/sec.
-- **Deep Route Resolution + Picklists**: ~61,000 operations/sec.
-- **Short Flag Clustering (`-xfvz`)**: ~113,300 operations/sec.
-- **Strict Ordered Pipeline Parsing**: ~103,300 operations/sec.
+Run the maintained contract suite and performance sanity benchmark from the
+repository root:
 
-All 125 tests across 18 test suites in `tests/runner.lua` pass with 0 failures, formally verifying the 30 compliance invariants.
+```sh
+moon run test
+moon exec lua benchmarks/bench.lua
+```
+
+The release workflow also runs `moon run test-packaged-completion`, which
+installs a Ballad-built CLI and its declared Lua runtime into a fresh Moonstone
+project before exercising the generated Bash completion bridge.

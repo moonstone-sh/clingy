@@ -7,7 +7,6 @@ local response = require("clingy.completion.response")
 local context_mod = require("clingy.completion.context")
 local discovery = require("clingy.completion.discovery")
 local named = require("clingy.named")
-local composed = require("clingy.composed")
 
 local M = {}
 
@@ -55,7 +54,7 @@ function M.parse_partial(router, words, cword)
   local ordered_cursor = 1
   local in_passthrough = false
   local waiting_option = nil
-  local waiting_define = nil
+  local active_form_binding = nil
 
   -- Returns the capture whose value begins at `offset` in an incomplete form.
   -- Completion is deliberately prefix-oriented: a literal may be partially
@@ -99,6 +98,21 @@ function M.parse_partial(router, words, cword)
     return false
   end
 
+  local function capture_after_next_token(atom, seen_next_token)
+    if atom._tag == "form_next_token" then return nil, true end
+    if atom._tag == "form_capture" and seen_next_token then return atom, true end
+    if atom.parts then
+      for _, part in ipairs(atom.parts) do
+        local capture, seen = capture_after_next_token(part, seen_next_token)
+        if capture then return capture, seen end
+        seen_next_token = seen_next_token or seen
+      end
+    elseif atom.part then
+      return capture_after_next_token(atom.part, seen_next_token)
+    end
+    return nil, seen_next_token
+  end
+
   local function update_ordered_cursor(node, binding)
     if node.mode == "ordered" and node.declarations_order then
       for idx, decl in ipairs(node.declarations_order) do
@@ -122,10 +136,6 @@ function M.parse_partial(router, words, cword)
         if current_node.end_capture and current_node.end_capture.legacy_passthrough then
           in_passthrough = true
         end
-      elseif waiting_define then
-        -- Definition values have a two-field record grammar, but completion
-        -- intentionally does not speculate inside either field.
-        waiting_define = nil
       elseif waiting_option then
         -- Previous option consumed this token as its value
         parsed_args[waiting_option.binding.result_key] = token
@@ -134,25 +144,6 @@ function M.parse_partial(router, words, cword)
         update_ordered_cursor(current_node, waiting_option.binding)
         waiting_option = nil
       elseif token:sub(1, 1) == "-" then
-        -- Definition prefixes have runtime precedence over regular options and
-        -- short clusters. Track detached values so they cannot become fake
-        -- positionals while completing later words.
-        local define_match = named.match_define(token, current_node.defines)
-        if define_match and not define_match.error then
-          local b = define_match.binding
-          if define_match.value == nil then
-            waiting_define = b
-          else
-            local records = parsed_args[b.result_key] or {}
-            table.insert(records, {
-              [b.define_pattern.name.label] = define_match.name,
-              [b.define_pattern.value.label] = define_match.value,
-            })
-            parsed_args[b.result_key] = records
-            option_counts[b.result_key] = (option_counts[b.result_key] or 0) + 1
-            update_ordered_cursor(current_node, b)
-          end
-        else
         -- Match runtime's exact-alias precedence and '=' / ':' attachments.
         local bindings = current_node.visible_options_by_name
         local opt_name, opt_val, separator_pos = named.split_attached_value(token, bindings)
@@ -176,7 +167,6 @@ function M.parse_partial(router, words, cword)
             end
           end
         end
-        end
       else
         -- Token does not start with '-': check subcommand transition
         local child_node = current_node.children and current_node.children[token]
@@ -195,19 +185,8 @@ function M.parse_partial(router, words, cword)
           consumed_positionals = consumed_positionals + 1
           local pos_binding = current_node.args and current_node.args[consumed_positionals]
           if pos_binding then
-            if pos_binding.kind == "compose" then
-              -- Composed tokens deliberately have no synthetic result key.
-              -- Retain their raw labelled fields for downstream dynamic
-              -- completion while leaving schema validation to the real parser.
-              local raw_captures = composed.match(token, pos_binding.composed_pattern)
-              if raw_captures then
-                for label, value in pairs(raw_captures) do
-                  parsed_args[label] = value
-                end
-              end
-            else
-              parsed_args[pos_binding.result_key] = token
-            end
+            if pos_binding.form then active_form_binding = pos_binding end
+            parsed_args[pos_binding.result_key] = token
             update_ordered_cursor(current_node, pos_binding)
           end
         end
@@ -225,10 +204,6 @@ function M.parse_partial(router, words, cword)
 
   if in_passthrough then
     focus = M.FOCUS.PASSTHROUGH
-  elseif waiting_define then
-    -- A record capture may have arbitrary schemas and separators. Do not emit
-    -- guesses that could leave the required value missing or malformed.
-    focus = M.FOCUS.PASSTHROUGH
   elseif waiting_option then
     focus = M.FOCUS.OPTION_VALUE
     target_binding = waiting_option.binding
@@ -239,10 +214,6 @@ function M.parse_partial(router, words, cword)
       focus = M.FOCUS.PASSTHROUGH
     else
       -- Match runtime's exact-alias precedence and '=' / ':' attachments.
-      local define_match = named.match_define(current_word, current_node.defines)
-      if define_match then
-        focus = M.FOCUS.PASSTHROUGH
-      else
       local bindings = current_node.visible_options_by_name
       local opt_name, opt_val, separator_pos, separator = named.split_attached_value(current_word, bindings)
       local b = bindings and bindings[opt_name]
@@ -262,14 +233,25 @@ function M.parse_partial(router, words, cword)
         focus = M.FOCUS.OPTION_NAME
         prefix = current_word
       end
-      end
     end
   else
     -- Current word is not starting with '-'
     local next_pos = consumed_positionals + 1
     local pos_binding = current_node.args and current_node.args[next_pos]
 
-    if pos_binding and pos_binding.form then
+    if not pos_binding and active_form_binding then
+      local capture = capture_after_next_token(active_form_binding.form, false)
+      if capture then
+        target_binding = {
+          schema = capture.schema,
+          completion = capture.complete and { origin = "explicit", provider = capture.complete } or nil,
+        }
+        focus = M.FOCUS.POSITIONAL
+        prefix = current_word
+      end
+    end
+
+    if not focus and pos_binding and pos_binding.form then
       local capture, capture_offset = partial_form_capture(pos_binding.form, current_word, 1)
       if capture then
         target_binding = {
@@ -400,14 +382,6 @@ function M.resolve_candidates(parse_result)
           local desc = (b.metadata and b.metadata.description) or (b.schema and b.schema.description)
           resp:add(name, desc)
         end
-      end
-    end
-    -- A bare definition prefix is useful to start a record, but once its
-    -- prefix is present we deliberately avoid completing inside the grammar.
-    for _, b in ipairs(node.defines or {}) do
-      local define_prefix = b.define_pattern and b.define_pattern.prefix
-      if define_prefix and define_prefix:sub(1, #prefix) == prefix then
-        resp:add(define_prefix, "definition record")
       end
     end
     if node.end_capture and node.end_capture.terminator

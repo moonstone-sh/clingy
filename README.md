@@ -22,7 +22,7 @@ local app = c.create({
     c.arg({ key = "name", schema = v.string() }),
     c.run(function(ctx)
       local name = ctx.args.shout and ctx.args.name:upper() or ctx.args.name
-      ctx.composer:log("info", string.format("%s, %s!", ctx.args.greeting or "Hello", name))
+      ctx:log("info", string.format("%s, %s!", ctx.args.greeting or "Hello", name))
     end),
   })),
 })
@@ -126,7 +126,7 @@ That form expresses both `-Dname=value` and `-Dname value`; Clingy has no `c.def
 
 ## Completion
 
-Completion belongs to reusable value schemas, with an explicit declaration or capture override for contextual cases. Picklists and literals supply finite candidates. File, directory, and custom completion providers may be stored as namespaced schema metadata.
+Completion belongs on the declaration or capture that consumes the value. Picklist schemas and form literals also supply finite candidates automatically.
 
 Completion does not validate an incomplete prefix. `tru` is invalid as a complete boolean but useful when completing `true`.
 
@@ -144,9 +144,8 @@ local script = c.completion.completion_script(app, "zsh", "greet")
 ```
 
 Its public provider constructors are `c.values`, `c.path`, `c.file`,
-`c.directory`, `c.dynamic`, and `c.none`. The existing `c.complete(provider,
-declaration)` adapter remains visible while completion metadata moves into
-schemas and capture declarations; new examples should prefer the latter.
+`c.directory`, `c.dynamic`, and `c.none`. Assign one to the `complete` field of
+`c.arg`, `c.option`, `c.flag`, or `c.capture`.
 
 ## API map
 
@@ -158,8 +157,15 @@ The public API is intentionally small enough to scan:
 - Forms: `c.sequence`, `c.choice`, `c.capture`, `c.literal`, `c.next_token`, `c.optional`.
 - Parser policy: `c.interspersed`, `c.leading`, `c.ordered`, `c.short_clusters`, `c.passthrough`, `c.tail`, `c.forward`.
 - Invocation: `c.run`, `c.signals`, `c.signal`, `c.stage`, `c.Context`.
-- Completion: `c.completion`, `c.complete`, `c.values`, `c.path`, `c.file`, `c.directory`, `c.dynamic`, `c.none`.
+- Completion: `c.completion`, `c.values`, `c.path`, `c.file`, `c.directory`, `c.dynamic`, `c.none`.
 - Runtime and presentation: `c.scope`, `c.process`, `c.lifecycle`, `c.events`, `c.presentation`, `c.composer`, `c.null_host`, `c.recording_host`, `c.failing_host`, `c.help`, `c.format_version`, `c.util`.
+
+An app exposes `graph`, `help`, `parse`, `run`, `handle_signal`, `complete`, and
+`completion_script`. Handler contexts expose `get`, `scope`, `spawn`, `span`,
+`progress`, `milestone`, `log`, `result`, `fail`, `confirm`, and `prompt`.
+`c.completion` exposes `complete`, `render`, and `completion_script`, together
+with its response, context, provider, discovery, partial-parser, and backend
+modules.
 
 ## Commands and modes
 

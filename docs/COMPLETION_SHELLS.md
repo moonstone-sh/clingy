@@ -25,7 +25,7 @@ local app = c.create({
   root = c.root(c.node({
     -- Subcommand: mycli completion <shell>
     completion = c.node({
-      c.arg("shell"),
+      c.arg({ key = "shell" }),
       c.run(function(ctx)
         local script = ctx.app:completion_script(ctx.args.shell, "mycli")
         print(script)

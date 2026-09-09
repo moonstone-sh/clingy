@@ -18,17 +18,17 @@ Test Results: 282 Passed, 0 Failed across 47 Test Suites
 
 | ID | Invariant Statement | Verification Proof |
 |---|---|---|
-| **HOST-INV-01** | Clingy runtime no longer assumes Composer is the only representation layer. | `App:run` mounts any `PresentationHost`; verified in `custom_host_spec.lua` and `host_lifecycle_spec.lua`. |
+| **HOST-INV-01** | Clingy runtime no longer assumes Composer is the only representation layer. | `App:run` mounts any `PresentationHost`; verified in `custom_host_spec.lua` and `scope_deferral_spec.lua`. |
 | **HOST-INV-02** | Composer remains the polished default representation layer. | Calling `app:run()` without explicit presentation mounts Composer auto/fancy/plain/ndjson. |
 | **HOST-INV-03** | Composer-specific options belong to Composer, not generic Host. | `opts.capture`, `is_tty`, `stdout`/`stderr` sinks belong to `c.composer(opts)` / `ComposerHost`. |
 | **HOST-INV-04** | Custom Hosts consume canonical semantic events (`clingy.events.v1`). | Verified in `event_ingestion_spec.lua`; all events emit standard protocol payload. |
 | **HOST-INV-05** | Runtime semantics do not depend on how events are rendered. | Handlers receive identical `ctx.args` and return values regardless of active host. |
-| **HOST-INV-06** | Exactly one Presentation Host owns application presentation for an invocation. | Per-invocation `opts.presentation` strictly overrides config; verified in `host_lifecycle_spec.lua`. |
+| **HOST-INV-06** | Exactly one Presentation Host owns application presentation for an invocation. | Per-invocation `opts.presentation` strictly overrides config; verified in `scope_deferral_spec.lua`. |
 | **HOST-INV-07** | Exactly one component owns terminal composition at a time. | Verified via single active host ownership, explicit host states, and child suspend/resume handoff. |
 | **HOST-INV-08** | Hosts without terminal usage are valid (NullHost, machine hosts, recording hosts). | Verified in `test_hosts_spec.lua` (`NullHost`, `RecordingHost`, `FailingHost`). |
 | **HOST-INV-09** | Interactive children can suspend and resume any terminal-owning Host (`mode = "interactive"`). | Verified in `subprocess_handoff_spec.lua`; if `suspend` fails, child execution is strictly aborted. |
 | **HOST-INV-10** | Host acquisition and release use structured scopes (`scope:defer`). | Bound to `root_scope:defer` in `App:run`; verified in `scope_deferral_spec.lua`. |
-| **HOST-INV-11** | Host release is exactly-once across normal return, runtime error, parse error, SIGINT, SIGTERM. | Verified in `scope_deferral_spec.lua` and `host_lifecycle_spec.lua`. |
+| **HOST-INV-11** | Host release is exactly-once across normal return, runtime error, parse error, SIGINT, SIGTERM. | Verified in `scope_deferral_spec.lua` and `signals_handoff_spec.lua`. |
 | **HOST-INV-12** | Presentation failure cannot leak terminal state or crash primary application logic. | Host methods wrapped in operation-specific severity containment; verified in `error_containment_spec.lua`. |
 | **HOST-INV-13** | Signal policy stays in Clingy orchestrator. | Signals handled by `signals.dispatch` and `App:handle_signal`; verified in `signals_handoff_spec.lua`. |
 | **HOST-INV-14** | A Host may represent prompts without becoming signal-policy authority. | `ctx:confirm` / `ctx:prompt` route to `host:prompt(request)` with structured prompt error propagation; verified in `prompt_protocol_spec.lua`. |
@@ -37,7 +37,7 @@ Test Results: 282 Passed, 0 Failed across 47 Test Suites
 | **HOST-INV-17** | TUI frameworks can mount without depending on Composer internals. | Custom stateful classes implement `PresentationHost` protocol cleanly; verified in `custom_host_spec.lua`. |
 | **HOST-INV-18** | Clingy does not become a component/layout/reconciliation framework. | Host protocol is strictly an event/lifecycle boundary; UI frameworks manage their own trees. |
 | **HOST-INV-19** | Existing fancy/plain/quiet/ndjson behavior remains supported. | Verified in `composer_host_spec.lua` and legacy `inv_20_21_composer_plain_spec.lua`. |
-| **HOST-INV-20** | Simple Clingy apps still work without explicitly constructing a Host (`app:run()`). | Verified across all original test suites without modification. |
+| **HOST-INV-20** | Simple Clingy apps still work without explicitly constructing a Host (`app:run()`). | Verified by the maintained runtime and presentation suites. |
 
 ---
 

@@ -29,11 +29,8 @@ local CLI = c.create({
 			c.arg({ key = "profile", schema = Profile }),
 
 			-- Filesystem and static value completion options
-			c.complete(c.directory(), c.option({ key = "dest", aliases = { "-d", "--dest" }, value = { schema = v.string() } })),
-			c.complete(
-				c.values({ "minimal", "microservice", "full-stack", "api-gateway" }),
-				c.option({ key = "template", aliases = { "-t", "--template" } })
-			),
+			c.option({ key = "dest", aliases = { "-d", "--dest" }, value = { schema = v.string() }, complete = c.directory() }),
+			c.option({ key = "template", aliases = { "-t", "--template" }, complete = c.values({ "minimal", "microservice", "full-stack", "api-gateway" }) }),
 
 			-- 'instant' nested subcommand
 			instant = c.node({
@@ -74,12 +71,9 @@ local CLI = c.create({
 
 		-- 'build' subcommand with repeated options and completions
 		build = c.node({
-			c.complete(
-				c.values({ "ENV=development", "ENV=production", "PORT=8080", "DEBUG=true" }),
-				c.option({ key = "define", aliases = { "-D", "--define" }, value = { schema = Define }, occurs = { min = 0, max = "many" } })
-			),
-			c.complete(c.file({ "*.lua" }), c.option({ key = "config", aliases = { "-c", "--config" } })),
-			c.complete(c.directory(), c.option({ key = "output_dir", aliases = { "-o", "--output-dir" } })),
+			c.option({ key = "define", aliases = { "-D", "--define" }, value = { schema = Define }, occurs = { min = 0, max = "many" }, complete = c.values({ "ENV=development", "ENV=production", "PORT=8080", "DEBUG=true" }) }),
+			c.option({ key = "config", aliases = { "-c", "--config" }, complete = c.file({ "*.lua" }) }),
+			c.option({ key = "output_dir", aliases = { "-o", "--output-dir" }, complete = c.directory() }),
 
 			c.run(function(ctx)
 				ctx:log("info", "Starting build...")
@@ -98,9 +92,9 @@ local CLI = c.create({
 			c.ordered(),
 
 			c.flag({ key = "prepare", aliases = { "--prepare" } }),
-			c.complete(c.file(), c.arg({ key = "source", schema = v.string() })),
+			c.arg({ key = "source", schema = v.string(), complete = c.file() }),
 			c.flag({ key = "commit", aliases = { "--commit" } }),
-			c.complete(c.path(), c.arg({ key = "destination", schema = v.string() })),
+			c.arg({ key = "destination", schema = v.string(), complete = c.path() }),
 
 			c.run(function(ctx)
 				ctx:log(

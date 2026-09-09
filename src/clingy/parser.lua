@@ -1,7 +1,6 @@
 local util = require("clingy.util")
 local adapter = require("clingy.adapter")
 local named = require("clingy.named")
-local composed = require("clingy.composed")
 local form = require("clingy.form")
 
 local M = {}
@@ -66,20 +65,6 @@ function M.parse(graph, argv)
 
   local i = 1
 
-  local function adapt_define_field(raw, field, prefix)
-    local ok, value_or_issues = adapter.adapt_and_validate(raw, field.schema, field.label)
-    if not ok then
-      local msg = string.format("Validation failed for definition '%s' field '%s': ", prefix, field.label)
-      if type(value_or_issues) == "table" and value_or_issues[1] then
-        msg = msg .. util.format_issue(value_or_issues[1])
-      else
-        msg = msg .. tostring(value_or_issues)
-      end
-      error(msg)
-    end
-    return value_or_issues
-  end
-
   while i <= #argv do
     local token = argv[i]
 
@@ -134,12 +119,7 @@ function M.parse(graph, argv)
 
       -- In leading mode, once positional consumption begins, option recognition stops
       if is_leading and seg_pos_consumed > 0 and not options_closed then
-        -- Section 1: Check if token exactly matches a visible named declaration or cluster
-        local define_match = named.match_define(token, current_node.defines)
-        if define_match then
-          error(string.format("Misplaced definition '%s' for command '%s'; leading-mode definition parsing ended after positional consumption began",
-            token, current_node.name))
-        end
+        -- Check if token exactly matches a visible named declaration or cluster.
         local opt_name, _, attached_separator_pos = named.split_attached_value(token, current_node.visible_options_by_name)
 
         if current_node.visible_options_by_name[opt_name] then
@@ -166,73 +146,6 @@ function M.parse(graph, argv)
       end
 
       if is_option_like then
-        -- Definition records claim their exact literal prefix before generic
-        -- option lookup or short-cluster expansion. This makes -Dname=VALUE
-        -- one grammar unit rather than a cluster beginning with -D.
-        local define_match = named.match_define(token, current_node.defines)
-        if define_match then
-          local decl = define_match.binding
-          local pattern = decl.define_pattern
-          if define_match.error then
-            error(string.format("Definition '%s' %s", pattern.prefix, define_match.error))
-          end
-
-          if current_node.mode == "ordered" then
-            local ord_cur = ordered_cursor[active_segment] or 1
-            local matched_ord_idx = nil
-            for d_idx = ord_cur, #(current_node.declarations_order or {}) do
-              local candidate = current_node.declarations_order[d_idx]
-              if candidate == decl then
-                matched_ord_idx = d_idx
-                break
-              elseif candidate.occurrence and candidate.occurrence.min and candidate.occurrence.min > 0 then
-                local cnt = occurrence_counts[candidate] or 0
-                if cnt < candidate.occurrence.min then
-                  error(string.format("Ordered grammar error: expected '%s' before '%s' on command '%s'",
-                    candidate.names and candidate.names[1] or candidate.name or candidate.result_key,
-                    token, current_node.name))
-                end
-              end
-            end
-            if not matched_ord_idx then
-              error(string.format("Ordered grammar error: definition '%s' appeared out of order on command '%s'",
-                token, current_node.name))
-            end
-            ordered_cursor[active_segment] = matched_ord_idx
-          end
-
-          local raw_value = define_match.value
-          if raw_value == nil then
-            i = i + 1
-            if i > #argv or argv[i] == "--" then
-              error(string.format("Definition '%s%s' requires a value", pattern.prefix, define_match.name))
-            end
-            raw_value = argv[i]
-          end
-
-          -- An empty argv element is not a definition value: a record always
-          -- has both fields, independently of the capture schema's domain.
-          if raw_value == "" then
-            error(string.format("Definition '%s%s' requires a value", pattern.prefix, define_match.name))
-          end
-          local record = {
-            [pattern.name.label] = adapt_define_field(define_match.name, pattern.name, pattern.prefix),
-            [pattern.value.label] = adapt_define_field(raw_value, pattern.value, pattern.prefix),
-          }
-          note_occurrence(decl)
-          if not collected_values[decl] then
-            collected_values[decl] = {}
-          end
-          table.insert(collected_values[decl], record)
-          local owner_seg = (decl.owner and route_segment_by_name[decl.owner]) or active_segment
-          if decl.aggregate == "array" then
-            owner_seg.args[decl.result_key] = collected_values[decl]
-          else
-            owner_seg.args[decl.result_key] = record
-          end
-          i = i + 1
-
-        else
         -- Handle attached values in either --opt=value or --opt:value form.
         local opt_name, attached_val, attached_separator_pos = named.split_attached_value(token, current_node.visible_options_by_name)
 
@@ -389,7 +302,6 @@ function M.parse(graph, argv)
             error(string.format("Unknown option or flag '%s' for command '%s'", token, current_node.name))
           end
         end
-        end
 
       else
         -- Non-option token: Child Command Transition or Positional Argument
@@ -499,35 +411,6 @@ function M.parse(graph, argv)
             table.insert(collected_values[matched_arg], record)
             active_segment.args[matched_arg.result_key] = matched_arg.aggregate == "array" and collected_values[matched_arg] or record
             i = next_i - 1
-          elseif matched_arg.kind == "compose" then
-            local raw_captures = composed.match(token, matched_arg.composed_pattern)
-            if not raw_captures then
-              error(string.format("Composed argument '%s' does not match fixed pattern '%s'",
-                token, matched_arg.composed_pattern.display))
-            end
-
-            local validated_captures = {}
-            for _, item in ipairs(matched_arg.composed_pattern.items) do
-              if item._tag == "capture" then
-                local ok, val_or_issues = adapter.adapt_and_validate(raw_captures[item.label], item.schema, item.label)
-                if not ok then
-                  local msg = "Validation failed for composed capture '" .. item.label .. "': "
-                  if type(val_or_issues) == "table" and val_or_issues[1] then
-                    msg = msg .. util.format_issue(val_or_issues[1])
-                  else
-                    msg = msg .. tostring(val_or_issues)
-                  end
-                  error(msg)
-                end
-                validated_captures[item.label] = val_or_issues
-              end
-            end
-
-            note_occurrence(matched_arg)
-            collected_values[matched_arg] = { token }
-            for label, value in pairs(validated_captures) do
-              active_segment.args[label] = value
-            end
           else
             -- Lexical adaptation & validation
             local ok, val_or_issues = adapter.adapt_and_validate(token, matched_arg.schema, matched_arg.result_key)

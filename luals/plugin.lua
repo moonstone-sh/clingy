@@ -56,31 +56,6 @@ local function find_matching_bracket(text, start_pos, open_char, close_char)
   return nil
 end
 
----Derives canonical identifier key from option/flag alias names.
-local function derive_key(names)
-  local longest_long = nil
-  local shortest_short = nil
-
-  for _, name in ipairs(names) do
-    if name:sub(1, 2) == "--" then
-      local bare = name:sub(3)
-      if not longest_long or #bare > #longest_long then
-        longest_long = bare
-      end
-    elseif name:sub(1, 1) == "-" then
-      local bare = name:sub(2)
-      if not shortest_short or #bare < #shortest_short then
-        shortest_short = bare
-      end
-    else
-      return name:gsub("%-", "_")
-    end
-  end
-
-  local chosen = longest_long or shortest_short or "arg"
-  return chosen:gsub("%-", "_")
-end
-
 ---Splits an argument list by top-level commas respecting quotes, brackets, and parentheses.
 local function split_top_level_args(args_str)
   local parts = {}
@@ -155,7 +130,7 @@ end
 ---3. Picklist/Enum literal unions (picklist({ "a", "b" }) -> "a"|"b") on validator namespaces
 ---4. Well-known primitive schema constructors (string, integer, number, boolean) on validator namespaces
 ---5. Variable assignment chains (local A = B)
----6. Bare arguments without schema (c.arg("name") -> string)
+---6. Table arguments without schema (`c.arg({ key = "name" })` -> string)
 ---7. Clean fallback to "unknown" for unproven/unrecognized constructors (e.g. anything.integer())
 ---@param schema_expr? string
 ---@param doc_text string
@@ -268,70 +243,63 @@ local function parse_quoted_string(part)
   return part:match("^['\"](.*)['\"]$")
 end
 
-local function parse_alias_literal(part)
-  local value = parse_quoted_string(part)
-  if value and value:sub(1, 1) == "-" then
-    return value
+local function parse_table_fields(expression)
+  expression = expression and expression:match("^%s*(.-)%s*$") or ""
+  if expression:sub(1, 1) ~= "{" or expression:sub(-1) ~= "}" then
+    return nil
   end
-  return nil
+  local fields = {}
+  for _, part in ipairs(split_top_level_args(expression:sub(2, -2))) do
+    local key, value = part:match("^%s*([%w_]+)%s*=%s*(.-)%s*$")
+    if key then fields[key] = value end
+  end
+  return fields
+end
+
+local function parse_aliases(expression)
+  local names = {}
+  for name in (expression or ""):gmatch("[\"']([^\"']+)[\"']") do
+    if name:sub(1, 1) == "-" then table.insert(names, name) end
+  end
+  return names
+end
+
+local function apply_occurrence_type(type_name, fields, required_default)
+  local occurrence = parse_table_fields(fields and fields.occurs)
+  local min = occurrence and tonumber(occurrence.min) or (required_default and 1 or 0)
+  local max = occurrence and occurrence.max
+  local repeated = max == '"many"' or max == "'many'" or (tonumber(max) or 0) > 1
+  if repeated then type_name = string.format("(%s)[]", type_name) end
+  return type_name, min > 0
 end
 
 ---Parses option arguments into aliases, result key, and resolved type string.
 local function parse_option_decl(opt_args, doc_text)
-  local parts = split_top_level_args(opt_args)
-  local names = {}
-  local schema_expr = nil
-  local explicit_key = nil
-  local start_index = 1
-
-  -- Runtime treats a leading bare string as the canonical explicit key. All
-  -- other forms remain alias-only for legacy schema-placement compatibility.
-  local first_literal = parts[1] and parse_quoted_string(parts[1])
-  if first_literal and first_literal:sub(1, 1) ~= "-" then
-    explicit_key = first_literal
-    start_index = 2
-  end
-
-  for index = start_index, #parts do
-    local part = parts[index]
-    local flag_name = parse_alias_literal(part)
-    if flag_name then
-      table.insert(names, flag_name)
-    else
-      schema_expr = part
-    end
-  end
-  local t = resolve_schema_type(schema_expr, doc_text)
-  return names, explicit_key or derive_key(names), t
+  local fields = parse_table_fields(opt_args)
+  if not fields then return {}, "arg", "unknown", false end
+  local value_fields = parse_table_fields(fields.value)
+  local schema_expr = fields.schema or (value_fields and value_fields.schema)
+  local type_name = resolve_schema_type(schema_expr, doc_text)
+  local required
+  type_name, required = apply_occurrence_type(type_name, fields, false)
+  return parse_aliases(fields.aliases), parse_quoted_string(fields.key or "") or "arg", type_name, required
 end
 
 ---Parses flag arguments into aliases and result key.
 local function parse_flag_decl(flag_args)
-  local names = {}
-  local explicit_key = nil
-
-  for _, part in ipairs(split_top_level_args(flag_args)) do
-    local flag_name = parse_alias_literal(part)
-    if flag_name then
-      table.insert(names, flag_name)
-    else
-      local bare = parse_quoted_string(part)
-      if bare and not explicit_key then
-        explicit_key = bare
-      end
-    end
-  end
-
-  return names, explicit_key or derive_key(names)
+  local fields = parse_table_fields(flag_args)
+  if not fields then return {}, "arg" end
+  return parse_aliases(fields.aliases), parse_quoted_string(fields.key or "") or "arg"
 end
 
 ---Parses argument declaration into argument name and resolved type string.
 local function parse_arg_decl(arg_args, doc_text)
-  local parts = split_top_level_args(arg_args)
-  local name = parts[1] and parts[1]:match("^[\"']([%w_%-]+)[\"']$") or "arg"
-  local schema_expr = parts[2]
-  local t = resolve_schema_type(schema_expr, doc_text)
-  return name, t
+  local fields = parse_table_fields(arg_args)
+  if not fields then return "arg", "unknown" end
+  local name = parse_quoted_string(fields.key or "") or "arg"
+  local type_name = resolve_schema_type(fields.schema, doc_text)
+  type_name = apply_occurrence_type(type_name, fields, true)
+  return name, type_name
 end
 
 ---Parses declarations in a text block, extracting inherited, positional, and local fields.
@@ -360,9 +328,9 @@ local function parse_decls_in_block(block_text, doc_text)
       for opt_call in inherit_content:gmatch("c%.option%b()") do
         local inner = opt_call:match("^c%.option%s*%((.*)%)%s*$")
         if inner then
-          local names, key, t = parse_option_decl(inner, doc_text)
+          local names, key, t, required = parse_option_decl(inner, doc_text)
           if #names > 0 then
-            inherited[key] = t .. "|nil"
+            inherited[key] = required and t or t .. "|nil"
           end
         end
       end
@@ -384,105 +352,7 @@ local function parse_decls_in_block(block_text, doc_text)
     end
   end
 
-  -- 2b. Fixed composed positional tokens. Only inline, key-first labelled
-  -- captures are statically knowable; runtime accepts the symmetric label
-  -- spelling too, but the plugin never evaluates user variables.
-  if masked:find("c.compose", 1, true) then
-    for compose_call in masked:gmatch("c%.compose%b()") do
-      local compose_inner = compose_call:match("^c%.compose%s*%((.*)%)%s*$")
-      if compose_inner then
-        for label_call in compose_inner:gmatch("c%.label%b()") do
-          local label_inner = label_call:match("^c%.label%s*%((.*)%)%s*$")
-          local parts = label_inner and split_top_level_args(label_inner) or {}
-          local label = parts[1] and parse_quoted_string(parts[1])
-          local capture_expr = parts[2]
-          local capture_inner = capture_expr and capture_expr:match("^c%.capture%s*%((.*)%)%s*$")
-          if label and capture_inner then
-            positionals[label:gsub("%-", "_")] = resolve_schema_type(capture_inner, doc_text)
-          end
-        end
-      end
-    end
-  end
-
-  -- 3. Repeated wrappers
-  for rep_call in masked:gmatch("c%.repeated%b()") do
-    local rep_inner = rep_call:match("^c%.repeated%s*%((.*)%)%s*$")
-    if rep_inner then
-      for opt_call in rep_inner:gmatch("c%.option%b()") do
-        local inner = opt_call:match("^c%.option%s*%((.*)%)%s*$")
-        if inner then
-          local names, key, t = parse_option_decl(inner, doc_text)
-          if #names > 0 then
-            locals[key] = string.format("(%s)[]|nil", t)
-          end
-        end
-      end
-      for arg_call in rep_inner:gmatch("c%.arg%b()") do
-        local inner = arg_call:match("^c%.arg%s*%((.*)%)%s*$")
-        if inner then
-          local name, t = parse_arg_decl(inner, doc_text)
-          positionals[name:gsub("%-", "_")] = string.format("(%s)[]", t)
-        end
-      end
-      for define_call in rep_inner:gmatch("c%.define%b()") do
-        local define_inner = define_call:match("^c%.define%s*%((.*)%)%s*$")
-        if define_inner then
-          local define_parts = split_top_level_args(define_inner)
-          local fragments = define_parts[2] or ""
-          local captures = {}
-          for label_call in fragments:gmatch("c%.label%b()") do
-            local label_inner = label_call:match("^c%.label%s*%((.*)%)%s*$")
-            local label_parts = label_inner and split_top_level_args(label_inner) or {}
-            local label = label_parts[1] and parse_quoted_string(label_parts[1])
-            local capture_expr = label_parts[2]
-            local capture_inner = capture_expr and capture_expr:match("^c%.capture%s*%((.*)%)%s*$")
-            if label and capture_inner then
-              captures[label] = resolve_schema_type(capture_inner, doc_text)
-            end
-          end
-          -- c.label("defines", c.repeated(c.define(...))) is the public
-          -- record form. Find its outer label without confusing it with the
-          -- two capture labels inside c.define.
-          for label_call in masked:gmatch("c%.label%b()") do
-            local label_inner = label_call:match("^c%.label%s*%((.*)%)%s*$")
-            local label_parts = label_inner and split_top_level_args(label_inner) or {}
-            local result_key = label_parts[1] and parse_quoted_string(label_parts[1])
-            local wrapped = label_parts[2] or ""
-            if result_key and wrapped:find("c.repeated", 1, true) and wrapped:find("c.define", 1, true) then
-              locals[result_key:gsub("-", "_")] = string.format("{ name: %s, value: %s }[]|nil",
-                captures.name or "unknown", captures.value or "unknown")
-            end
-          end
-        end
-      end
-    end
-  end
-
-  -- 4. Required wrappers
-  for req_call in masked:gmatch("c%.required%b()") do
-    local req_inner = req_call:match("^c%.required%s*%((.*)%)%s*$")
-    if req_inner then
-      for opt_call in req_inner:gmatch("c%.option%b()") do
-        local inner = opt_call:match("^c%.option%s*%((.*)%)%s*$")
-        if inner then
-          local names, key, t = parse_option_decl(inner, doc_text)
-          if #names > 0 then
-            locals[key] = t
-          end
-        end
-      end
-      for arg_call in req_inner:gmatch("c%.arg%b()") do
-        local inner = arg_call:match("^c%.arg%s*%((.*)%)%s*$")
-        if inner then
-          local name, t = parse_arg_decl(inner, doc_text)
-          positionals[name:gsub("%-", "_")] = t
-        end
-      end
-    end
-  end
-
-  local unrepeated = masked:gsub("c%.repeated%s*%b()", ""):gsub("c%.required%s*%b()", "")
+  local unrepeated = masked
 
   -- 5. Local flags
   for flag_call in unrepeated:gmatch("c%.flag%b()") do
@@ -499,9 +369,9 @@ local function parse_decls_in_block(block_text, doc_text)
   for opt_call in unrepeated:gmatch("c%.option%b()") do
     local inner = opt_call:match("^c%.option%s*%((.*)%)%s*$")
     if inner then
-      local names, key, t = parse_option_decl(inner, doc_text)
+      local names, key, t, required = parse_option_decl(inner, doc_text)
       if #names > 0 then
-        locals[key] = t .. "|nil"
+        locals[key] = required and t or t .. "|nil"
       end
     end
   end
@@ -514,20 +384,13 @@ local function parse_decls_in_block(block_text, doc_text)
     end
   end
 
-  -- 8. Tail declarations. The indexed `end` spelling is a deprecated alias.
+  -- 8. Tail declarations.
   for tail_call in unrepeated:gmatch("c%.tail%s*%b()") do
     local key = tail_call:match("c%.tail%s*%(%s*[\"']([%w_%-]+)[\"']")
     if key then
       locals[key:gsub("%-", "_")] = "string[]"
     end
   end
-  for end_call in unrepeated:gmatch("c%[%s*[\"']end[\"']%s*%]%s*%b()") do
-    local key = end_call:match("c%[%s*[\"']end[\"']%s*%]%s*%(%s*[\"']([%w_%-]+)[\"']")
-    if key then
-      locals[key:gsub("%-", "_")] = "string[]"
-    end
-  end
-
   return inherited, positionals, locals
 end
 

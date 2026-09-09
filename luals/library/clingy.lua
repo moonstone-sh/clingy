@@ -216,8 +216,6 @@ function Context:confirm(prompt, opts) end
 
 ---@class clingy
 ---@field tail fun(name: string, terminator: string, opts: { [1]: clingy.ForwardPolicy }): clingy.EndDeclaration
----@deprecated Use c.tail instead.
----@field ["end"] fun(name: string, terminator: string, opts: { [1]: clingy.ForwardPolicy }): clingy.EndDeclaration
 local c = {}
 
 ---Compiles a declarative CLI specification into an executable App.
@@ -246,33 +244,8 @@ function c.group(declarations) end
 ---@return table
 function c.inherit(...) end
 
----Declares a positional argument.
----Default occurrence: 1..1 (required).
----@generic I, O
----@param name string
----@param schema standard_schema.Schema<I, O>
----@return clingy.Binding<O>
----@overload fun(name: string): clingy.Binding<string>
-function c.arg(name, schema) end
-
----@class clingy.Capture<O>
----@field _tag "capture"
----@field schema? any
----@field label? string
----@field source? clingy.Capture<O>
----@field _inner? clingy.Capture<O>
-
----@class clingy.DefineSeparator
----@field _tag "define_separator"
----@field separators string[] Includes " " for detached values.
-
----@class clingy.ComposeSeparator
----@field _tag "compose_separator"
----@field text string
----@field trim boolean
-
 ---@class clingy.Literal
----@field _tag "literal"
+---@field _tag "form_literal"
 ---@field text string
 
 ---@class clingy.ForwardPolicy
@@ -285,93 +258,67 @@ function c.arg(name, schema) end
 ---@field terminator string
 ---@field forward "trimmed"|"complete"
 
----@class clingy.DefineRecord<N, V>
----@field name N
----@field value V
+---@class clingy.Occurs
+---@field min? integer
+---@field max? integer|"many"
 
----@class clingy.ComposedPositional
----@field _tag "compose"
----@field items (clingy.Capture<any>|clingy.Literal|clingy.ComposeSeparator)[]
+---@class clingy.ArgOptions<O>
+---@field key string
+---@field schema? standard_schema.Schema<any, O>
+---@field form? table
+---@field occurs? clingy.Occurs
+---@field complete? clingy.CompletionProvider
 
----Declares a typed capture fragment for c.compose. It must be labelled.
----@generic I, O
----@param schema? standard_schema.Schema<I, O>
----@return clingy.Capture<O>
-function c.capture(schema) end
+---@class clingy.OptionOptions<O>
+---@field key string
+---@field aliases string[]
+---@field value? { schema?: standard_schema.Schema<any, O>, attached?: string[], detached?: boolean, adjacent?: boolean }
+---@field form? table
+---@field occurs? clingy.Occurs
+---@field complete? table
 
----Declares a two-field compiler-style definition record. The fragment table
----must contain labelled `name`, separator, and labelled `value` captures.
----@generic N, V
----@param prefix string
----@param fragments { [1]: clingy.Capture<N>, [2]: clingy.DefineSeparator, [3]: clingy.Capture<V> }
----@return clingy.Binding<clingy.DefineRecord<N, V>|nil>
-function c.define(prefix, fragments) end
+---@class clingy.FlagOptions
+---@field key string
+---@field aliases string[]
+---@field occurs? clingy.Occurs
+---@field complete? table
 
----Declares exact fixed text in a composed positional pattern.
----@param text string
----@return clingy.Literal
-function c.literal(text) end
-
----Builds one required positional argv token from labelled captures, literals,
----and separators. The entire token must match.
----@param ... clingy.Capture<any>|clingy.Literal|clingy.ComposeSeparator
----@return clingy.ComposedPositional
-function c.compose(...) end
-
----Labels a binding result or a capture within c.compose.
 ---@generic O
----@overload fun(declaration: clingy.Binding<O>|clingy.Capture<O>, name: string): clingy.Binding<O>|clingy.Capture<O>
----@param name string
----@param declaration clingy.Binding<O>|clingy.Capture<O>
----@return clingy.Binding<O>|clingy.Capture<O>
-function c.label(name, declaration) end
-
----Controls an option's accepted value separators. `""` declares an adjacent
----value and is accepted only by the option-wrapper overload, never a pattern
----fragment or flag.
----@overload fun(separators: string[], opts?: { trim?: boolean }): clingy.DefineSeparator
----@overload fun(text: string, opts?: { trim?: boolean }): clingy.ComposeSeparator
----@param separators string|string[]
----@param option clingy.Binding<any>
----@param opts? { trim?: boolean }
----@return clingy.Binding<any>
-function c.separator(separators, option, opts) end
-
----Declares a named option with a value.
----Default occurrence: 0..1 (optional).
----@generic I, O
----@overload fun(result_key: string, long: string, short: string, schema: standard_schema.Schema<I, O>): clingy.Binding<O|nil>
----@overload fun(name: string, schema: standard_schema.Schema<I, O>): clingy.Binding<O|nil>
----@overload fun(short: string, long: string, schema: standard_schema.Schema<I, O>): clingy.Binding<O|nil>
----@overload fun(name: string): clingy.Binding<string|nil>
----@overload fun(short: string, long: string): clingy.Binding<string|nil>
----@param ... any Explicit form: result_key first, aliases, then final schema. Legacy alias-only forms are also accepted.
----@return clingy.Binding<any>
-function c.option(...) end
-
----Declares a boolean flag.
----Default occurrence: 0..1 (absent: false, present: true).
----@param ... any Optional explicit result_key followed by flag names starting with '-'
----@return clingy.Binding<boolean>
-function c.flag(...) end
-
----Cardinality modifier: sets occurrence.min = 0 (optional).
----@generic O
----@param binding clingy.Binding<O>
----@return clingy.Binding<O|nil>
-function c.optional(binding) end
-
----Cardinality modifier: sets occurrence.min = 1 (required).
----@generic O
----@param binding clingy.Binding<O>
+---@param opts clingy.ArgOptions<O>
 ---@return clingy.Binding<O>
-function c.required(binding) end
+function c.arg(opts) end
 
----Cardinality modifier: sets occurrence.max = nil (unbounded repeated array).
 ---@generic O
----@param binding clingy.Binding<O>
----@return clingy.Binding<O[]>
-function c.repeated(binding) end
+---@param opts clingy.OptionOptions<O>
+---@return clingy.Binding<O>
+function c.option(opts) end
+
+---@param opts clingy.FlagOptions
+---@return clingy.Binding<boolean>
+function c.flag(opts) end
+
+---@param opts { key: string, schema?: any, complete?: table }
+---@return table
+function c.capture(opts) end
+
+---@param opts { text: string }
+---@return table
+function c.literal(opts) end
+
+---@param parts table[]
+---@return table
+function c.sequence(parts) end
+
+---@param parts table[]
+---@return table
+function c.choice(parts) end
+
+---@return table
+function c.next_token() end
+
+---@param atom table
+---@return table
+function c.optional(atom) end
 
 ---Parser mode: interspersed (default). Visible options/flags may appear between positionals.
 ---@return table
@@ -405,14 +352,6 @@ function c.forward(mode) end
 ---@param opts { [1]: clingy.ForwardPolicy }
 ---@return clingy.EndDeclaration
 function c.tail(name, terminator, opts) end
-
----Deprecated compatibility alias for c.tail.
----@deprecated Use c.tail instead.
----@param name string
----@param terminator string
----@param opts { [1]: clingy.ForwardPolicy }
----@return clingy.EndDeclaration
-c["end"] = function(name, terminator, opts) end
 
 ---Declares the execution handler for a command node.
 ---@param fn fun(ctx: clingy.Context<table<string, any>>): any
@@ -476,14 +415,6 @@ function c.schema_adapter(adapter) end
 ---@field _tag "completion_provider"
 ---@field kind "values"|"path"|"file"|"directory"|"dynamic"|"none"
 ---@field resolve fun(self: clingy.CompletionProvider, ctx: clingy.CompletionContext): clingy.CompletionResponse
-
----Attaches a completion provider to a declaration.
----@generic T
----@param provider clingy.CompletionProvider
----@param decl clingy.Binding<T>
----@return clingy.Binding<T>
----@overload fun(decl: clingy.Binding<T>, provider: clingy.CompletionProvider): clingy.Binding<T>
-function c.complete(provider, decl) end
 
 ---Constructs a static values completion provider.
 ---@param ... string|table|string[] List of values or candidate tables

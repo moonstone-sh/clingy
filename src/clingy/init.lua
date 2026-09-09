@@ -62,7 +62,6 @@ c.short_clusters = dsl.short_clusters
 -- Passthrough
 c.passthrough = dsl.passthrough
 c.tail = dsl.tail
-c["end"] = dsl.tail -- Deprecated compatibility alias; use c.tail.
 c.forward = dsl.forward
 
 -- Handlers and signals
@@ -72,7 +71,6 @@ c.signal = dsl.signal
 c.stage = dsl.stage
 
 -- Completion
-c.complete = dsl.complete
 c.values = dsl.values
 c.path = dsl.path
 c.file = dsl.file
@@ -104,7 +102,5 @@ c.schema_adapter = c.adapter.register
 c.completion = require("clingy.completion")
 c.util = require("clingy.util")
 c.Context = require("clingy.context").Context
-
-c.c = c
 
 return c

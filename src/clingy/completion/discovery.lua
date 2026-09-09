@@ -1,7 +1,7 @@
 --[[
   src/clingy/completion/discovery.lua
   Schema-Derived Discovery: Automatic option/argument candidate extraction.
-  Strict Precedence: explicit c.complete > schema-derived > no provider (c.none hard suppression).
+  Strict precedence: declaration-local provider > schema-derived provider > no provider.
 ]]
 
 local adapter = require("clingy.adapter")

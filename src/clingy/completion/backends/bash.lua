@@ -25,6 +25,8 @@ __%s_complete() {
         words=("${COMP_WORDS[@]}")
         cword=$COMP_CWORD
     fi
+    # Clingy's completion API uses Lua's 1-based word indices.
+    cword=$((cword + 1))
 
     local output
     output=$(%s --__clingy-complete bash "${words[@]}" --cword="$cword" 2>/dev/null)
@@ -35,7 +37,7 @@ __%s_complete() {
 
     local IFS=$'\n'
     local lines
-    read -d '' -ra lines <<< "$output"
+    read -d '' -ra lines <<< "$output" || true
 
     for line in "${lines[@]}"; do
         if [[ "$line" == :directive:* ]]; then

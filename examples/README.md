@@ -138,7 +138,7 @@ moon exec lua src/main.lua --json compile desktop -o dist
 
 Examples use Clingy's shell completion engine:
 - **Schema-Derived Autocomplete**: Picklists and enums (e.g. `v.picklist({ "development", "production", "test" })`) are discovered automatically.
-- **Filesystem Completions**: Reusable file and directory suggestions belong to schema completion metadata; a declaration or capture may override them locally.
+- **Filesystem Completions**: File and directory providers are assigned through a declaration or capture's `complete` field.
 - **Dynamic Context Inspection**: In `subprocess-lifecycle`, worker task names adapt dynamically to preceding `--tasks` arguments (`runner worker --tasks 4 <TAB>` &rarr; `job-01..job-04`).
 - **Structured Descriptions**: In `json-stream-events`, `--profile` options provide rich candidate descriptions formatted natively for Zsh, Fish, and PowerShell.
 

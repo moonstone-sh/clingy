@@ -1,6 +1,5 @@
 local util = require("clingy.util")
 local discovery = require("clingy.completion.discovery")
-local composed = require("clingy.composed")
 
 local M = {}
 
@@ -85,27 +84,15 @@ function M.normalize(config)
 
     local pos_index = 1
     for decl_idx, decl in ipairs(flattened) do
-      if decl._tag == "declaration" or decl._tag == "compose" then
-        if decl._tag == "compose" and decl.inherited then
-          error(string.format("Compilation Error: c.compose on node '%s' cannot be inherited", node_name))
-        end
-        if decl.kind == "define" and decl.inherited then
-          error(string.format("Compilation Error: c.define on node '%s' cannot be inherited", node_name))
-        end
-        if decl.kind == "define" and not decl.define_repeated then
-          error(string.format("Compilation Error: c.define on node '%s' must be wrapped exactly once by c.repeated(...)", node_name))
-        end
-
-        local composed_pattern = nil
-        if decl._tag == "compose" then
-          composed_pattern = composed.compile(decl)
-        end
+      if decl._tag == "declaration" then
         local binding_id = node_id .. ":" .. (decl.result_key or decl.name or tostring(decl_idx))
         local visibility = decl.inherited and "descendants" or "local"
 
         local comp_meta = nil
         if decl.completion then
-          comp_meta = decl.completion
+          comp_meta = decl.completion._tag == "completion_provider"
+            and { origin = decl.completion.kind == "none" and "none" or "explicit", provider = decl.completion }
+            or decl.completion
         elseif decl.schema then
           local discovered = discovery.discover_provider(decl.schema)
           if discovered then
@@ -139,12 +126,12 @@ function M.normalize(config)
         local binding = {
           id = binding_id,
           owner = node_id,
-          kind = decl._tag == "compose" and "compose" or decl.kind,
+          kind = decl.kind,
           name = decl.name,
           names = decl.names,
           result_key = decl.result_key,
           visibility = visibility,
-          position = (decl.kind == "arg" or decl._tag == "compose") and pos_index or nil,
+          position = decl.kind == "arg" and pos_index or nil,
           schema = decl.schema,
           form = decl.form,
           completion = comp_meta,
@@ -155,11 +142,9 @@ function M.normalize(config)
           metadata = decl.metadata,
           separator_policy = separator_policy,
           declaration_index = decl_idx,
-          composed_pattern = composed_pattern,
-          define_pattern = decl.define_pattern,
         }
 
-        if decl.kind == "arg" or decl._tag == "compose" then
+        if decl.kind == "arg" then
           pos_index = pos_index + 1
         end
 
@@ -176,33 +161,6 @@ function M.normalize(config)
         end
         if decl._inner then
           decl_map[decl._inner] = binding
-        end
-
-        -- A labelled capture has no independent argv occurrence, but ctx:get
-        -- should still resolve its source handle to its own output field.
-        if composed_pattern then
-          for _, item in ipairs(composed_pattern.items) do
-            if item._tag == "capture" then
-              local capture_binding = { result_key = item.label }
-              if item.source then
-                decl_map[item.source] = capture_binding
-                if item.source._inner then
-                  decl_map[item.source._inner] = capture_binding
-                end
-              end
-            end
-          end
-          -- flatten_declarations deep-copies the pattern, so retain binding
-          -- identity for the capture handles supplied by the application too.
-          for _, item in ipairs((decl._orig_decl or decl).items or {}) do
-            if item._tag == "capture" then
-              local capture_binding = { result_key = item.label }
-              decl_map[item] = capture_binding
-              if item._inner then
-                decl_map[item._inner] = capture_binding
-              end
-            end
-          end
         end
 
       elseif decl._tag == "parser_mode" then
@@ -372,7 +330,7 @@ function M.validate_graph(graph)
       local b = bindings[b_id]
       if b then
         -- Invariant 13: Positional arguments cannot be inherited
-        if (b.kind == "arg" or b.kind == "compose") and b.visibility == "descendants" then
+        if b.kind == "arg" and b.visibility == "descendants" then
           error(string.format("Compilation Error: Positional argument '%s' on node '%s' cannot be inherited (Section 16, Invariant 13)", b.name, node.name))
         end
 
@@ -389,7 +347,7 @@ function M.validate_graph(graph)
         end
 
         -- Invariant 12: Output key collision on same node
-        local output_keys = b.composed_pattern and b.composed_pattern.labels or { b.result_key }
+        local output_keys = { b.result_key }
         for _, output_key in ipairs(output_keys) do
           if local_keys[output_key] then
             error(string.format("Compilation Error: Output-key collision on node '%s' for key '%s'", node.name, output_key))
@@ -401,7 +359,7 @@ function M.validate_graph(graph)
           local_keys[output_key] = b
         end
 
-        if b.kind == "arg" or b.kind == "compose" then
+        if b.kind == "arg" then
           table.insert(positional_bindings, b)
         elseif b.kind == "option" or b.kind == "flag" then
           for _, name in ipairs(b.names or {}) do
@@ -418,13 +376,6 @@ function M.validate_graph(graph)
           end
         end
 
-        if b.kind == "define" then
-          local prefix = b.define_pattern and b.define_pattern.prefix
-          if local_names[prefix] then
-            error(string.format("Compilation Error: Duplicate c.define prefix '%s' on node '%s'", prefix, node.name))
-          end
-          local_names[prefix] = b
-        end
       end
     end
 
@@ -468,15 +419,7 @@ function M.validate_graph(graph)
           next_options[name] = b
         end
       end
-      if b then
-        if b.composed_pattern then
-          for _, output_key in ipairs(b.composed_pattern.labels) do
-            next_keys[output_key] = b
-          end
-        else
-          next_keys[b.result_key] = b
-        end
-      end
+      if b then next_keys[b.result_key] = b end
     end
 
     for _, child_name in ipairs(node.child_order) do
@@ -513,7 +456,6 @@ function M.compile_router(graph)
     local positionals = {}
     local options = {}
     local flags = {}
-    local defines = {}
     local ordered_bindings = {}
     local effective_end_capture = inherited_ctx.end_capture
     if node.end_capture then
@@ -524,7 +466,7 @@ function M.compile_router(graph)
       local b = bindings[b_id]
       if b then
         table.insert(ordered_bindings, b)
-        if b.kind == "arg" or b.kind == "compose" then
+        if b.kind == "arg" then
           table.insert(positionals, b)
         elseif b.kind == "option" then
           table.insert(options, b)
@@ -536,8 +478,6 @@ function M.compile_router(graph)
           for _, name in ipairs(b.names or {}) do
             visible_bindings_by_name[name] = b
           end
-        elseif b.kind == "define" then
-          table.insert(defines, b)
         end
       end
     end
@@ -600,7 +540,6 @@ function M.compile_router(graph)
       args = positionals,
       options = options,
       flags = flags,
-      defines = defines,
       visible_options_by_name = visible_bindings_by_name,
       inherited_options_by_name = inherited_ctx.options,
       children = children,
