@@ -41,6 +41,15 @@ function M.parse(graph, argv)
 
   -- Track occurrences across declarations: decl -> count
   local occurrence_counts = {}
+  local function note_occurrence(decl)
+    local count = occurrence_counts[decl] or 0
+    local max = decl.occurrence and decl.occurrence.max
+    if max ~= nil and count >= max then
+      error(string.format("Declaration '%s' may occur at most %d time(s)",
+        decl.names and decl.names[1] or decl.name or decl.result_key, max))
+    end
+    occurrence_counts[decl] = count + 1
+  end
   -- Track collected values: decl -> list of validated values
   local collected_values = {}
   -- Track positionals consumed per segment: segment -> int
@@ -210,7 +219,7 @@ function M.parse(graph, argv)
             [pattern.name.label] = adapt_define_field(define_match.name, pattern.name, pattern.prefix),
             [pattern.value.label] = adapt_define_field(raw_value, pattern.value, pattern.prefix),
           }
-          occurrence_counts[decl] = (occurrence_counts[decl] or 0) + 1
+          note_occurrence(decl)
           if not collected_values[decl] then
             collected_values[decl] = {}
           end
@@ -274,7 +283,7 @@ function M.parse(graph, argv)
             if attached_val ~= nil then
               error(string.format("Flag '%s' does not take a value", opt_name))
             end
-            occurrence_counts[decl] = (occurrence_counts[decl] or 0) + 1
+            note_occurrence(decl)
             collected_values[decl] = true
 
             -- Record in the owner node's segment
@@ -283,20 +292,18 @@ function M.parse(graph, argv)
             i = i + 1
 
           elseif decl.kind == "option" and decl.form then
-            local raw_fields, next_i = form.match(decl.form, argv, i, form_offset or #opt_name + 1)
+            local raw_fields, next_i, matched_captures = form.match(decl.form, argv, i, form_offset or #opt_name + 1)
             if not raw_fields then error(string.format("Option '%s' does not match its declared form", opt_name)) end
             local record = {}
-            local function validate_form(atom)
-              if atom._tag == "form_capture" and raw_fields[atom.key] ~= nil then
-                local ok, value = adapter.adapt_and_validate(raw_fields[atom.key], atom.schema, atom.key)
+            local function validate_form()
+              for key, atom in pairs(matched_captures) do
+                local ok, value = adapter.adapt_and_validate(raw_fields[key], atom.schema, key)
                 if not ok then error("Validation failed for form capture '" .. atom.key .. "'") end
-                record[atom.key] = value
-              elseif atom.parts then
-                for _, child in ipairs(atom.parts) do validate_form(child) end
-              elseif atom.part then validate_form(atom.part) end
+                record[key] = value
+              end
             end
-            validate_form(decl.form)
-            occurrence_counts[decl] = (occurrence_counts[decl] or 0) + 1
+            validate_form()
+            note_occurrence(decl)
             if not collected_values[decl] then collected_values[decl] = {} end
             table.insert(collected_values[decl], record)
             local owner_seg = (decl.owner and route_segment_by_name[decl.owner]) or active_segment
@@ -332,7 +339,7 @@ function M.parse(graph, argv)
               error(msg)
             end
 
-            occurrence_counts[decl] = (occurrence_counts[decl] or 0) + 1
+            note_occurrence(decl)
             if not collected_values[decl] then
               collected_values[decl] = {}
             end
@@ -369,7 +376,7 @@ function M.parse(graph, argv)
             if all_flags and #cluster_decls > 0 then
               is_cluster = true
               for _, ch_decl in ipairs(cluster_decls) do
-                occurrence_counts[ch_decl] = (occurrence_counts[ch_decl] or 0) + 1
+                note_occurrence(ch_decl)
                 collected_values[ch_decl] = true
                 local owner_seg = (ch_decl.owner and route_segment_by_name[ch_decl.owner]) or active_segment
                 owner_seg.args[ch_decl.result_key] = true
@@ -474,24 +481,20 @@ function M.parse(graph, argv)
           end
 
           if matched_arg.form then
-            local raw_fields, next_i = form.match(matched_arg.form, argv, i)
+            local raw_fields, next_i, matched_captures = form.match(matched_arg.form, argv, i)
             if not raw_fields then
               error(string.format("Argument '%s' does not match its declared form", matched_arg.result_key))
             end
             local record = {}
-            local function validate_form(atom)
-              if atom._tag == "form_capture" and raw_fields[atom.key] ~= nil then
-                local ok, value = adapter.adapt_and_validate(raw_fields[atom.key], atom.schema, atom.key)
+            local function validate_form()
+              for key, atom in pairs(matched_captures) do
+                local ok, value = adapter.adapt_and_validate(raw_fields[key], atom.schema, key)
                 if not ok then error("Validation failed for form capture '" .. atom.key .. "'") end
-                record[atom.key] = value
-              elseif atom.parts then
-                for _, child in ipairs(atom.parts) do validate_form(child) end
-              elseif atom.part then
-                validate_form(atom.part)
+                record[key] = value
               end
             end
-            validate_form(matched_arg.form)
-            occurrence_counts[matched_arg] = (occurrence_counts[matched_arg] or 0) + 1
+            validate_form()
+            note_occurrence(matched_arg)
             if not collected_values[matched_arg] then collected_values[matched_arg] = {} end
             table.insert(collected_values[matched_arg], record)
             active_segment.args[matched_arg.result_key] = matched_arg.aggregate == "array" and collected_values[matched_arg] or record
@@ -520,7 +523,7 @@ function M.parse(graph, argv)
               end
             end
 
-            occurrence_counts[matched_arg] = (occurrence_counts[matched_arg] or 0) + 1
+            note_occurrence(matched_arg)
             collected_values[matched_arg] = { token }
             for label, value in pairs(validated_captures) do
               active_segment.args[label] = value
@@ -538,7 +541,7 @@ function M.parse(graph, argv)
               error(msg)
             end
 
-            occurrence_counts[matched_arg] = (occurrence_counts[matched_arg] or 0) + 1
+            note_occurrence(matched_arg)
             if not collected_values[matched_arg] then
               collected_values[matched_arg] = {}
             end

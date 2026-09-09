@@ -135,7 +135,7 @@ function M.arg(opts)
     schema = opts.schema,
     form = opts.form,
     occurrence = occurs,
-    aggregate = opts.occurs and opts.occurs.max == "many" and "array" or "scalar",
+    aggregate = opts.occurs and (opts.occurs.max == "many" or (type(opts.occurs.max) == "number" and opts.occurs.max > 1)) and "array" or "scalar",
     values = { min = 1, max = 1 },
   }
 end
@@ -192,7 +192,7 @@ local function validate_aliases(kind, names)
   end
 
   for _, name in ipairs(names) do
-    if name == "-" or name == "--" then
+    if type(name) ~= "string" or name:sub(1, 1) ~= "-" or name == "-" or name == "--" then
       error(string.format("c.%s alias '%s' is not a usable option or flag spelling", kind, name))
     end
   end
@@ -213,6 +213,7 @@ function M.option(...)
   if not util.is_array(opts.aliases or {}) or #opts.aliases == 0 then
     error("c.option aliases must be a non-empty array")
   end
+  validate_aliases("option", opts.aliases)
   nonblank_string(opts.key, "c.option key")
   local value = opts.value or { schema = opts.schema }
   local occurs = opts.occurs or { min = 0, max = 1 }
@@ -230,7 +231,7 @@ function M.option(...)
     _tag = "declaration", kind = "option", names = opts.aliases,
     result_key = opts.key, explicit_result_key = true, schema = value.schema, form = opts.form,
     occurrence = occurs, values = { min = 1, max = 1 },
-    aggregate = opts.occurs and opts.occurs.max == "many" and "array" or "scalar",
+    aggregate = opts.occurs and (opts.occurs.max == "many" or (type(opts.occurs.max) == "number" and opts.occurs.max > 1)) and "array" or "scalar",
     separator_policy = { separators = legacy_separators, trim = value.trim ~= false },
     completion = opts.complete,
   } end
@@ -305,6 +306,7 @@ function M.flag(...)
   if not util.is_array(opts.aliases or {}) or #opts.aliases == 0 then
     error("c.flag aliases must be a non-empty array")
   end
+  validate_aliases("flag", opts.aliases)
   nonblank_string(opts.key, "c.flag key")
   do return {
     _tag = "declaration", kind = "flag", names = opts.aliases,

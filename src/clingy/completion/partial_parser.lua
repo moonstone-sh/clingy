@@ -57,6 +57,48 @@ function M.parse_partial(router, words, cword)
   local waiting_option = nil
   local waiting_define = nil
 
+  -- Returns the capture whose value begins at `offset` in an incomplete form.
+  -- Completion is deliberately prefix-oriented: a literal may be partially
+  -- present, but captures become eligible only after their preceding literals
+  -- have matched in full.
+  local function partial_form_capture(atom, word, offset)
+    if atom._tag == "form_capture" then return atom, offset end
+    if atom._tag == "form_literal" then
+      local remaining = word:sub(offset)
+      if #remaining < #atom.text and atom.text:sub(1, #remaining) == remaining then
+        return nil, offset + #remaining
+      end
+      if word:sub(offset, offset + #atom.text - 1) == atom.text then
+        return nil, offset + #atom.text
+      end
+      return false
+    end
+    if atom._tag == "form_sequence" then
+      local cursor = offset
+      for _, part in ipairs(atom.parts) do
+        local capture, next_offset = partial_form_capture(part, word, cursor)
+        if capture == false then return false end
+        if capture then return capture, next_offset end
+        cursor = next_offset
+        if cursor > #word + 1 then return nil, cursor end
+      end
+      return nil, cursor
+    end
+    if atom._tag == "form_choice" then
+      for _, part in ipairs(atom.parts) do
+        local capture, next_offset = partial_form_capture(part, word, offset)
+        if capture ~= false then return capture, next_offset end
+      end
+      return false
+    end
+    if atom._tag == "form_optional" then
+      local capture, next_offset = partial_form_capture(atom.part, word, offset)
+      if capture == false then return nil, offset end
+      return capture, next_offset
+    end
+    return false
+  end
+
   local function update_ordered_cursor(node, binding)
     if node.mode == "ordered" and node.declarations_order then
       for idx, decl in ipairs(node.declarations_order) do
@@ -227,9 +269,26 @@ function M.parse_partial(router, words, cword)
     local next_pos = consumed_positionals + 1
     local pos_binding = current_node.args and current_node.args[next_pos]
 
+    if pos_binding and pos_binding.form then
+      local capture, capture_offset = partial_form_capture(pos_binding.form, current_word, 1)
+      if capture then
+        target_binding = {
+          schema = capture.schema,
+          completion = capture.complete and { origin = "explicit", provider = capture.complete } or nil,
+        }
+        focus = M.FOCUS.POSITIONAL
+        prefix = current_word:sub(capture_offset)
+        -- Keep the already-matched literal segment so rendered candidates are
+        -- valid argv words rather than bare capture fragments.
+        target_binding.form_prefix = current_word:sub(1, capture_offset - 1)
+      end
+    end
+
     local has_children = current_node.children and next(current_node.children) ~= nil
 
-    if has_children and pos_binding then
+    if focus == M.FOCUS.POSITIONAL then
+      -- A form capture has already selected the completion target.
+    elseif has_children and pos_binding then
       focus = "FOCUS_SUBCOMMAND_OR_POSITIONAL"
       target_binding = pos_binding
     elseif has_children then
@@ -407,6 +466,9 @@ function M.resolve_candidates(parse_result)
       if provider then
         local p_resp = provider:resolve(ctx)
         for _, cand in ipairs(p_resp.candidates) do
+          if parse_result.target_binding.form_prefix then
+            cand.value = parse_result.target_binding.form_prefix .. cand.value
+          end
           resp:add(cand)
         end
         if p_resp.directive and p_resp.directive ~= response.DIRECTIVE.DEFAULT then

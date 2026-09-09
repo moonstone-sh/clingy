@@ -11,16 +11,24 @@ permissions:
 
 jobs:
   runtime-tests:
-    name: Lua ${{ matrix.runtime }}
+    name: Moonstone runtime contract
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        runtime: ["5.1", "5.2", "5.3", "5.4", "5.5", "luajit-2.1"]
     steps:
       - uses: actions/checkout@v4
-      - uses: leafo/gh-actions-lua@v13
+      - uses: actions/checkout@v4
         with:
-          luaVersion: ${{ matrix.runtime }}
+          repository: moonstone-sh/moonstone
+          ref: main
+          path: .ci/moonstone
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Build Moonstone CLI
+        working-directory: .ci/moonstone
+        run: |
+          zig build
+          echo "$GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin" >> "$GITHUB_PATH"
+      - name: Synchronize project dependencies
+        run: moon sync
       - name: Run the runtime suite
-        run: lua tests/runner.lua
+        run: moon run test

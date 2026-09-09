@@ -9,9 +9,7 @@ app = c.create({
   description = "Deterministic Declarative CLI Engine for Lua",
 
   c.root(c.node({
-    c.inherit(
-      c.flag("-h", "--help")
-    ),
+    c.inherit({ c.flag({ key = "help", aliases = { "-h", "--help" } }) }),
 
     c.run(function(ctx)
       if ctx.args.help then
@@ -23,8 +21,8 @@ app = c.create({
     end),
 
     init = c.node({
-      c.option("-c", "--config", v.string()),
-      c.flag("-y", "--yes"),
+      c.option({ key = "config", aliases = { "-c", "--config" }, value = { schema = v.string() } }),
+      c.flag({ key = "yes", aliases = { "-y", "--yes" } }),
 
       c.run(function(ctx)
         if ctx.args.help then

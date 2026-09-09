@@ -18,26 +18,26 @@ local CLI = c.create({
 
 	c.root(c.node({
 		-- Root inheritance: passed down to all descendants
-		c.inherit(c.interspersed(), c.short_clusters(), c.flag("-v", "--verbose"), c.flag("-q", "--quiet")),
+		c.inherit(c.interspersed(), c.short_clusters(), c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }), c.flag({ key = "quiet", aliases = { "-q", "--quiet" } })),
 
 		-- 'init' subcommand
 		init = c.node({
 			-- Subtree inheritance: --json is visible to 'init' and its descendants (like 'instant')
-			c.inherit(c.flag("--json")),
+			c.inherit(c.flag({ key = "json", aliases = { "--json" } })),
 
 			-- Positional argument owned by 'init' (schema-derived picklist completion)
-			c.arg("profile", Profile),
+			c.arg({ key = "profile", schema = Profile }),
 
 			-- Filesystem and static value completion options
-			c.complete(c.directory(), c.option("-d", "--dest", v.string())),
+			c.complete(c.directory(), c.option({ key = "dest", aliases = { "-d", "--dest" }, value = { schema = v.string() } })),
 			c.complete(
 				c.values({ "minimal", "microservice", "full-stack", "api-gateway" }),
-				c.option("-t", "--template")
+				c.option({ key = "template", aliases = { "-t", "--template" } })
 			),
 
 			-- 'instant' nested subcommand
 			instant = c.node({
-				c.flag("-n", "--now"),
+				c.flag({ key = "now", aliases = { "-n", "--now" } }),
 
 				c.signals({
 					interrupt = function(ctx)
@@ -76,10 +76,10 @@ local CLI = c.create({
 		build = c.node({
 			c.complete(
 				c.values({ "ENV=development", "ENV=production", "PORT=8080", "DEBUG=true" }),
-				c.repeated(c.option("-D", "--define", Define))
+				c.option({ key = "define", aliases = { "-D", "--define" }, value = { schema = Define }, occurs = { min = 0, max = "many" } })
 			),
-			c.complete(c.file({ "*.lua" }), c.option("-c", "--config")),
-			c.complete(c.directory(), c.option("-o", "--output-dir")),
+			c.complete(c.file({ "*.lua" }), c.option({ key = "config", aliases = { "-c", "--config" } })),
+			c.complete(c.directory(), c.option({ key = "output_dir", aliases = { "-o", "--output-dir" } })),
 
 			c.run(function(ctx)
 				ctx:log("info", "Starting build...")
@@ -97,10 +97,10 @@ local CLI = c.create({
 		legacy = c.node({
 			c.ordered(),
 
-			c.flag("--prepare"),
-			c.complete(c.file(), c.arg("source", v.string())),
-			c.flag("--commit"),
-			c.complete(c.path(), c.arg("destination", v.string())),
+			c.flag({ key = "prepare", aliases = { "--prepare" } }),
+			c.complete(c.file(), c.arg({ key = "source", schema = v.string() })),
+			c.flag({ key = "commit", aliases = { "--commit" } }),
+			c.complete(c.path(), c.arg({ key = "destination", schema = v.string() })),
 
 			c.run(function(ctx)
 				ctx:log(
@@ -121,7 +121,7 @@ local CLI = c.create({
 
 		-- 'completion' subcommand to generate shell scripts
 		completion = c.node({
-			c.arg("shell", v.picklist({ "bash", "zsh", "fish", "powershell" })),
+			c.arg({ key = "shell", schema = v.picklist({ "bash", "zsh", "fish", "powershell" }) }),
 
 			c.run(function(ctx)
 				local script = ctx.app:completion_script(ctx.args.shell, "meteorite")

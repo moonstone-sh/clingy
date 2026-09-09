@@ -11,14 +11,14 @@ local CLI = c.create({
 
     c.root(c.node({
         c.inherit(
-            c.flag("-v", "--verbose")
+            c.flag({ key = "verbose", aliases = { "-v", "--verbose" } })
         ),
 
         init = require("cli.init"),
         build = require("cli.build.node"),
 
         completion = c.node({
-            c.arg("shell", v.picklist({ "bash", "zsh", "fish", "powershell" })),
+            c.arg({ key = "shell", schema = v.picklist({ "bash", "zsh", "fish", "powershell" }) }),
             c.run(function(ctx)
                 local script = ctx.app:completion_script(ctx.args.shell, "modular-cli")
                 io.write(script, "\n")
