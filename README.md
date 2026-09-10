@@ -171,6 +171,14 @@ An app exposes `graph`, `help`, `parse`, `run`, `handle_signal`, `complete`, and
 with its response, context, provider, discovery, partial-parser, and backend
 modules.
 
+`c.process.supervisor_script(opts)` generates an exec-able Bash supervisor for
+a long-running, headless process group. It handles Ctrl-C, terminal Ctrl-D,
+TERM, HUP, parent loss, bounded TERM-to-KILL escalation, and direct-child
+reaping. See [foreground process supervision](docs/process-supervision.md) for
+the ownership contract and platform limits. The older `ManagedProcess` API is
+a synchronous command adapter; its state transitions are not native OS process
+control.
+
 ## Commands and modes
 
 Nodes compose into nested routers. Inherited declarations are visible to descendants; parser modes are local to a node.

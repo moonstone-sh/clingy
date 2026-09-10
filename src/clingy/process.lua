@@ -2,6 +2,12 @@ local util = require("clingy.util")
 
 local M = {}
 
+---Build an exec-able Bash supervisor for a headless child process group.
+---Use a launcher to exec the script so it receives terminal signals directly.
+function M.supervisor_script(opts)
+  return require("clingy.supervisor").script(opts)
+end
+
 local VALID_STATES = {
   declared = 1,
   spawning = 2,

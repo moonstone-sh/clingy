@@ -91,5 +91,10 @@ consumes a detached value.
 - Valua schema adaptation, declaration-local completion, structured scopes,
   subprocess supervision, signals, help, and NDJSON presentation.
 
+Long-running tools can generate an exec-able Bash process-group owner with
+`c.process.supervisor_script(opts)`. It provides terminal Ctrl-C/Ctrl-D
+shutdown, bounded escalation, parent-loss cleanup, and session locking on
+macOS/Linux; the repository documentation describes the exact contract.
+
 See the repository [README](README.md) for the DSL overview and
 [examples](examples/README.md) for runnable projects.
