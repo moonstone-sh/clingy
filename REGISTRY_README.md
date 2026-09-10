@@ -8,8 +8,15 @@ machine-readable presentation behind one Moonstone dependency.
 
 ```sh
 moon add moonstone/clingy
-moon exec clingy -- init --config ./.luarc.json --yes
+moon exec clingy -- init --yes
 ```
+
+`clingy init` enrolls the Clingy analyzer through
+`moonstone/luals-composer`. Composer is the only component that writes
+LuaLS plugin activation and composes Clingy with other enrolled plugins such
+as Valua and Hydronium LUAX. The command manages the project-root
+`.luarc.json`; it refuses ambiguous legacy plugin configurations instead of
+guessing which arguments belong to which plugin.
 
 The package is a portable Lua executable and library artifact. Moonstone locks
 the exact artifact and selected runtime for the consuming project.

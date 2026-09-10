@@ -555,13 +555,18 @@ local function compute_visible_fields(node)
   return visible
 end
 
----Processes document text for LuaLS, injecting route-specific context annotations for each `c.run`.
+---Returns independent zero-width annotation hunks for every inferable c.run.
+---
+---LuaLS applies OnSetText diffs against the original document.  Keeping these
+---as insertions means luals-composer can safely compose Clingy with Valua's
+---annotations and LUAX's syntax projection; returning one rewritten string
+---would claim the whole file and starve both of them.
 ---@param uri string
 ---@param text string
----@return string?
-function M.process_text(uri, text)
+---@return table[] diffs
+function M.process_diffs(uri, text)
   if not text or not text:find("c%.run") then
-    return text
+    return {}
   end
 
   local ok, res = pcall(function()
@@ -593,19 +598,28 @@ function M.process_text(uri, text)
       end
 
       if next(fallback_fields) == nil then
-        return text
+        return {}
       end
 
       local ctx_type = M.build_context_annotation(fallback_fields)
-      return text:gsub("(c%.run%s*%(%s*function%s*%(%s*([%w_]+)%s*%))", function(full_call, param_name)
-        return string.format("%s ---@cast %s %s", full_call, param_name, ctx_type)
-      end)
+      local diffs = {}
+      local scan_pos = 1
+      while true do
+        local _, e, param_name = text:find("c%.run%s*%(%s*function%s*%(%s*([%w_]+)%s*%)", scan_pos)
+        if not e then break end
+        diffs[#diffs + 1] = {
+          start = e + 1,
+          finish = e,
+          text = string.format(" ---@cast %s %s", param_name, ctx_type),
+        }
+        scan_pos = e + 1
+      end
+      return diffs
     end
 
-    -- For each c.run occurrence, find the innermost enclosing node and inject cast
-    local result_parts = {}
-    local last_pos = 1
-
+    -- For each c.run occurrence, find the innermost enclosing node and insert
+    -- a cast immediately after its closing parameter parenthesis.
+    local diffs = {}
     local scan_pos = 1
     while true do
       local s, e, param_name = text:find("c%.run%s*%(%s*function%s*%(%s*([%w_]+)%s*%)", scan_pos)
@@ -620,27 +634,44 @@ function M.process_text(uri, text)
         injection = string.format(" ---@cast %s %s", param_name, ctx_type)
       end
 
-      table.insert(result_parts, text:sub(last_pos, e))
       if injection ~= "" then
-        table.insert(result_parts, injection)
+        diffs[#diffs + 1] = { start = e + 1, finish = e, text = injection }
       end
-      last_pos = e + 1
       scan_pos = e + 1
     end
 
-    table.insert(result_parts, text:sub(last_pos))
-    return table.concat(result_parts)
+    return diffs
   end)
 
   if ok and res then
     return res
   end
-  return text
+  return {}
+end
+
+---Processes document text for direct unit tests and backwards-compatible
+---consumers. LuaLS itself receives the zero-width diffs from OnSetText below.
+---@param uri string
+---@param text string
+---@return string
+function M.process_text(uri, text)
+  local diffs = M.process_diffs(uri, text)
+  if #diffs == 0 then return text end
+
+  local parts, cursor = {}, 1
+  for _, diff in ipairs(diffs) do
+    parts[#parts + 1] = text:sub(cursor, diff.start - 1)
+    parts[#parts + 1] = diff.text
+    cursor = diff.start
+  end
+  parts[#parts + 1] = text:sub(cursor)
+  return table.concat(parts)
 end
 
 -- Hook for LuaLS OnSetText
 function OnSetText(uri, text)
-  return M.process_text(uri, text)
+  local diffs = M.process_diffs(uri, text)
+  return #diffs > 0 and diffs or nil
 end
 
 -- Hook for LuaLS OnTransformAst (if present in environment)

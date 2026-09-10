@@ -171,6 +171,22 @@ An app exposes `graph`, `help`, `parse`, `run`, `handle_signal`, `complete`, and
 with its response, context, provider, discovery, partial-parser, and backend
 modules.
 
+## LuaLS plugin
+
+Install the package and enroll Clingy's analyzer with:
+
+```sh
+moon add moonstone/clingy
+moon exec clingy -- init --yes
+```
+
+Clingy delegates plugin registration to `moonstone/luals-composer`, which
+keeps one LuaLS entry point in `.luarc.json` and an ordered, named plugin list
+in `luals-composer.json`. This lets Clingy's insertion edits compose with
+Valua and LUAX plugins. Initialization refuses competing `.luarc.jsonc` files,
+unknown plugin arguments, duplicate identities, and incompatible Composer
+versions rather than silently reordering or dropping plugins.
+
 `c.process.supervisor_script(opts)` generates an exec-able Bash supervisor for
 a long-running, headless process group. It handles Ctrl-C, terminal Ctrl-D,
 TERM, HUP, parent loss, bounded TERM-to-KILL escalation, and direct-child

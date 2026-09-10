@@ -34,12 +34,13 @@ end
 
 local function lua_ls_version(root)
   local env = read_file(root .. "/.moonstone/env/env.toml")
-  if not env then
-    return nil, "Moonstone environment not found; run 'moon sync' first"
-  end
-  local name = env:match('name%s*=%s*"([^"]+)"')
-  local version = env:match('version%s*=%s*"([^"]+)"')
-  if name == "luajit" then return "LuaJIT", "2.1" end
+  if not env then return nil, "Moonstone environment not found; run 'moon sync' first" end
+  local runtime = env:match("%[runtime%](.-)\n%[") or env:match("%[runtime%](.*)$")
+  if not runtime then return nil, "Moonstone environment has no runtime table" end
+  local name = runtime:match('name%s*=%s*"([^"]+)"')
+  local version = runtime:match('version%s*=%s*"([^"]+)"')
+  if name == "luajit" then return "LuaJIT", "5.1" end
+  if name ~= "lua" then return nil, "Unsupported Moonstone runtime: " .. tostring(name) end
   local major, minor
   if version then major, minor = version:match("^(%d+)%.(%d+)") end
   if not major then return nil, "Could not determine the selected Lua version" end
@@ -54,51 +55,66 @@ local function confirm(summary, yes)
   return response == "y" or response == "Y" or response == "yes"
 end
 
----@param opts { config?: string, yes?: boolean, cwd?: string }
----@return alter.CommitResult|nil result
----@return string|alter.Error|alter.Conflict|nil err
+local function descriptor(lua_dir)
+  return {
+    name = "clingy",
+    path = ".moonstone/env/share/lua/" .. lua_dir .. "/clingy/luals/plugin.lua",
+    transport = "^0.1.0",
+    contract = 1,
+    text_edits = "insertions",
+    args = {},
+    priority = "last",
+  }
+end
+
+local function set_runtime_version(config, version)
+  local doc, err = alter.open(config, { backend = jsonc, create = true, default_text = "{}\n" })
+  if not doc then return nil, err end
+  local runtime = doc:at("runtime")
+  local kind = runtime:kind()
+  if kind ~= "none" and kind ~= "object" then
+    return nil, alter.errors.conflict({ "runtime" }, "object", kind)
+  end
+  runtime:ensure_object():at("version"):set(version)
+  return doc:commit()
+end
+
+---@param opts { yes?: boolean, cwd?: string }
+---@return table|nil result
+---@return string|table|nil err
 function init.run(opts)
   opts = opts or {}
   local cwd = opts.cwd or os.getenv("PWD") or "."
   local root = find_project_root(cwd)
-  local config = opts.config or (root .. "/.luarc.json")
+  local config = root .. "/.luarc.json"
   local runtime_version, lua_dir_or_err = lua_ls_version(root)
   if not runtime_version then return nil, lua_dir_or_err end
 
-  local plugin_path = ".moonstone/env/share/lua/" .. lua_dir_or_err .. "/clingy/luals/plugin.lua"
-  local doc, open_err = alter.open(config, {
-    backend = jsonc,
-    create = true,
-    default_text = "{}\n",
-  })
-  if not doc then return nil, open_err end
-
-  local runtime = doc:at("runtime")
-  local runtime_kind = runtime:kind()
-  if runtime_kind ~= "none" and runtime_kind ~= "object" then
-    return nil, alter.errors.conflict({ "runtime" }, "object", runtime_kind)
-  end
-
-  local plugin = doc:at("runtime", "plugin")
-  local plugin_kind = plugin:kind()
-  if plugin_kind ~= "none" and plugin_kind ~= "array" and plugin_kind ~= "string" then
-    return nil, alter.errors.conflict({ "runtime", "plugin" }, "array|string", plugin_kind)
-  end
+  local transport = require("luals_composer")
+  local plugin = descriptor(lua_dir_or_err)
+  local plan, plan_err = transport.plan({ root = root, plugin = plugin })
+  if not plan then return nil, plan_err end
 
   local summary = table.concat({
     "Clingy will configure " .. config,
     "  runtime.version = " .. runtime_version,
-    "  runtime.plugin += " .. plugin_path,
+    "  " .. plan.summary,
+    "  registry = " .. plan.registry,
   }, "\n")
   if not confirm(summary, opts.yes) then return nil, "cancelled" end
 
-  runtime:ensure_object():at("version"):set(runtime_version)
-  if plugin_kind == "string" then
-    plugin:set({ plugin:get(), plugin_path })
-  else
-    plugin:ensure_array():append_unique(plugin_path)
-  end
-  return doc:commit()
+  -- Updating runtime.version invalidates the first Composer snapshot. Re-plan
+  -- after this independent editor setting is committed; Composer remains the
+  -- sole writer of plugin activation and its managed sidecar.
+  local runtime_result, runtime_err = set_runtime_version(config, runtime_version)
+  if not runtime_result then return nil, runtime_err end
+  plan, plan_err = transport.plan({ root = root, plugin = plugin })
+  if not plan then return nil, plan_err end
+  local result, commit_err = plan:commit()
+  if not result then return nil, commit_err end
+  result.changed = runtime_result.changed or result.changed
+  result.runtime = runtime_version
+  return result
 end
 
 return init
