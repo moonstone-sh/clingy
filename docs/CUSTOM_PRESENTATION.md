@@ -25,12 +25,12 @@ end
 local app = c.create({
   name = "demo-app",
   presentation = MinimalHost,
-  c.root(c.node({
+  root = c.node({
     c.run(function(ctx)
       ctx:log("info", "Running with minimal host")
       return { success = true }
     end),
-  })),
+  }),
 })
 
 app:run({})
@@ -117,7 +117,7 @@ local my_host = TuiHost.new()
 local app = c.create({
   name = "my-service",
   presentation = my_host,
-  c.root(...),
+  root = c.node({ ... }),
 })
 ```
 

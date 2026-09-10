@@ -12,7 +12,7 @@ local v = require("valua")
 
 local app = c.create({
   name = "greet",
-  c.root(c.node({
+  root = c.node({
     c.flag({ key = "shout", aliases = { "-s", "--shout" } }),
     c.option({
       key = "greeting",
@@ -24,7 +24,7 @@ local app = c.create({
       local name = ctx.args.shout and ctx.args.name:upper() or ctx.args.name
       ctx:log("info", string.format("%s, %s!", ctx.args.greeting or "Hello", name))
     end),
-  })),
+  }),
 })
 
 app:run(arg)
@@ -156,7 +156,7 @@ attached prefix such as `--config=` or a form literal such as `argument:`.
 The public API is intentionally small enough to scan:
 
 - App and graph: `c.create`, `c.reflect`, `c.inspect`, `c.compiler`, `c.parser`, `c.adapter`, `c.schema_adapter`.
-- Router: `c.root`, `c.node`, `c.group`, `c.inherit`.
+- Router: `root = c.node(...)`, `c.node`, `c.group`, `c.inherit`.
 - Declarations: `c.arg`, `c.option`, `c.flag`.
 - Forms: `c.sequence`, `c.choice`, `c.capture`, `c.literal`, `c.next_token`, `c.optional`.
 - Parser policy: `c.interspersed`, `c.leading`, `c.ordered`, `c.short_clusters`, `c.passthrough`, `c.tail`, `c.forward`.
@@ -181,22 +181,27 @@ control.
 
 ## Commands and modes
 
-Nodes compose into nested routers. Inherited declarations are visible to descendants; parser modes are local to a node.
+Nodes compose into nested routers. `c.create` has exactly one root grammar:
+`root = c.node({ ... })`. Inherited declarations are visible to descendants;
+parser modes are local to a node.
 
 ```lua
-c.root(c.node({
+root = c.node({
   c.inherit({ c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }) }),
   build = c.node({
     c.leading(),
     c.arg({ key = "source", schema = v.string() }),
     c.arg({ key = "destination", schema = v.string() }),
   }),
-}))
+})
 ```
 
 `c.interspersed()` is the default. `c.leading()` stops option recognition after the first positional. `c.ordered()` enforces declaration order. `c.short_clusters()` enables transactional clusters such as `-xvf`.
 
-A literal `--` ends option parsing. Use `c.tail` to capture or forward the remaining argv words.
+A node's positional declarations form a required fixed prefix before its child
+commands. Child names and aliases are reserved after that prefix. A literal
+`--` ends option parsing and routing, so a reserved command spelling can be
+passed as positional data. Use `c.tail` to capture or forward remaining words.
 
 ## Documentation
 

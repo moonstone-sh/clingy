@@ -1,6 +1,6 @@
 # Clingy DSL
 
-Clingy 0.3 uses table declarations. Every value has an explicit handler key.
+Clingy uses table declarations. Every value has an explicit handler key.
 
 ```lua
 c.flag({ key = "verbose", aliases = { "-v", "--verbose" } })

@@ -7,6 +7,7 @@ local h = require("tests.harness")
 -- completion behavior.
 local suites = {
   "tests.new_api_spec",
+  "tests.router_semantics_spec",
   "tests.cli.init_spec",
   "tests.completion.backends_spec",
   "tests.invariants.inv_17_18_lifecycle_process_spec",

@@ -219,14 +219,9 @@ function Context:confirm(prompt, opts) end
 local c = {}
 
 ---Compiles a declarative CLI specification into an executable App.
----@param config { [1]?: table, root?: table|clingy.CommandNode, name?: string, version?: string, description?: string, mode?: "auto"|"fancy"|"plain"|"quiet"|"json" }
+---@param config { root: clingy.CommandNode, name?: string, version?: string, description?: string, mode?: "auto"|"fancy"|"plain"|"quiet"|"json" }
 ---@return clingy.App
 function c.create(config) end
-
----Declares the root command node for `c.create`.
----@param node clingy.CommandNode
----@return table
-function c.root(node) end
 
 ---Defines a command node in the CLI router tree.
 ---@param children_and_decls table Array of declarations and string-keyed child nodes

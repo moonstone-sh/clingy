@@ -29,14 +29,14 @@ describe("Built-in Test Hosts: NullHost, RecordingHost, FailingHost (HOST-INV-08
       local app = c.create({
         name = "null-test-app",
         presentation = null_h,
-        c.root(c.node({
+        root = c.node({
           c.run(function(ctx)
             ctx:log("info", "Silent message")
             ctx:progress("step", 50)
             ctx:result("Hidden payload")
             return { ok = true }
           end),
-        })),
+        }),
       })
 
       local exit_code = app:run({})
@@ -52,13 +52,13 @@ describe("Built-in Test Hosts: NullHost, RecordingHost, FailingHost (HOST-INV-08
       local app = c.create({
         name = "recording-test-app",
         presentation = rec,
-        c.root(c.node({
+        root = c.node({
           c.run(function(ctx)
             ctx:log("warn", "Warning 1")
             ctx:log("error", "Error 1")
             return { processed = true }
           end),
-        })),
+        }),
       })
 
       local exit_code = app:run({})

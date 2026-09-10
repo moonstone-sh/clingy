@@ -12,14 +12,14 @@ describe("Presentation Host Performance & Latency Benchmarks", function()
     local app = c.create({
       name = "perf-events-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           for i = 1, 1000 do
             ctx:log("info", "Benchmark log message " .. tostring(i))
           end
           return { ok = true }
         end),
-      })),
+      }),
     })
 
     local start_time = os.clock()
@@ -49,9 +49,9 @@ describe("Presentation Host Performance & Latency Benchmarks", function()
       local app = c.create({
         name = "bench-null",
         presentation = null_h,
-        c.root(c.node({
+        root = c.node({
           c.run(function(ctx) ctx:log("info", "hi") end)
-        }))
+        })
       })
       app:run({})
     end
@@ -64,9 +64,9 @@ describe("Presentation Host Performance & Latency Benchmarks", function()
       local app = c.create({
         name = "bench-rec",
         presentation = rec_h,
-        c.root(c.node({
+        root = c.node({
           c.run(function(ctx) ctx:log("info", "hi") end)
-        }))
+        })
       })
       app:run({})
     end
@@ -79,9 +79,9 @@ describe("Presentation Host Performance & Latency Benchmarks", function()
       local app = c.create({
         name = "bench-comp",
         presentation = comp_h,
-        c.root(c.node({
+        root = c.node({
           c.run(function(ctx) ctx:log("info", "hi") end)
-        }))
+        })
       })
       app:run({})
     end

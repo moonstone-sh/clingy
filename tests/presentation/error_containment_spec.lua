@@ -13,7 +13,7 @@ describe("Presentation Host Error Containment (HOST-INV-12)", function()
     local app = c.create({
       name = "err-contain-app",
       presentation = failing_host,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           -- Emitting log will trigger failing_host:handle_event which throws
           ctx:log("info", "This event will throw in host")
@@ -21,7 +21,7 @@ describe("Presentation Host Error Containment (HOST-INV-12)", function()
           handler_completed = true
           return { success = true }
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -37,12 +37,12 @@ describe("Presentation Host Error Containment (HOST-INV-12)", function()
     local app = c.create({
       name = "finish-err-app",
       presentation = failing_host,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           handler_ran = true
           return { done = true }
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -56,11 +56,11 @@ describe("Presentation Host Error Containment (HOST-INV-12)", function()
     local app = c.create({
       name = "app-err-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           error("Fatal database connection failure")
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})

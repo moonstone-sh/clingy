@@ -11,9 +11,9 @@ describe("Structured Scope Lifetime & Exactly-Once Release (HOST-INV-06)", funct
     local app = c.create({
       name = "success-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx) return "ok" end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -26,11 +26,11 @@ describe("Structured Scope Lifetime & Exactly-Once Release (HOST-INV-06)", funct
     local app = c.create({
       name = "error-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           error("Fatal business exception inside handler")
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -49,7 +49,7 @@ describe("Structured Scope Lifetime & Exactly-Once Release (HOST-INV-06)", funct
     local app = c.create({
       name = "scope-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           return ctx:scope(function(scope)
             scope:defer(function()
@@ -58,7 +58,7 @@ describe("Structured Scope Lifetime & Exactly-Once Release (HOST-INV-06)", funct
             return "nested_done"
           end)
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})

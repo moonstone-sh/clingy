@@ -18,9 +18,9 @@ describe("Shell Completion Backends", function()
   describe("Script Generation (Thin Shims)", function()
     local app = c.create({
       name = "stellar",
-      c.root(c.node({
+      root = c.node({
         c.run(function() end),
-      })),
+      }),
     })
 
     it("generates valid Bash completion script", function()

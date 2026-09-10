@@ -40,17 +40,6 @@ local function nonblank_string(value, subject)
   return value
 end
 
----Marks the root node of the CLI application.
-function M.root(node)
-  if type(node) ~= "table" or node._tag ~= "node" then
-    error("c.root must be passed a c.node(...)")
-  end
-  return {
-    _tag = "root",
-    node = node,
-  }
-end
-
 ---Defines a command node in the CLI router tree.
 ---@param children_and_decls table Array of declarations + string-keyed child nodes.
 ---@param metadata table? Optional metadata: { description = "...", aliases = { ... }, hidden = false }
@@ -65,14 +54,10 @@ function M.node(children_and_decls, metadata)
     if type(k) == "number" then
       declarations[k] = v
     elseif type(k) == "string" then
-      if type(v) ~= "table" or (v._tag ~= "node" and v._tag ~= "root") then
+      if type(v) ~= "table" or v._tag ~= "node" then
         error(string.format("Child '%s' must be a c.node(...)", k))
       end
-      if v._tag == "root" then
-        children[k] = v.node
-      else
-        children[k] = v
-      end
+      children[k] = v
     else
       error(string.format("Invalid key type in c.node: %s", type(k)))
     end

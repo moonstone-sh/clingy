@@ -23,7 +23,7 @@ local v = require("valua")
 local app = c.create({
   name = "deployer",
   version = "1.0.0",
-  c.root(c.node({
+  root = c.node({
     c.inherit({
       c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }),
       c.flag({ key = "json", aliases = { "--json" } }),
@@ -49,7 +49,7 @@ local app = c.create({
         }
       end),
     }),
-  })),
+  }),
 })
 
 app:run(arg)

@@ -2,6 +2,7 @@ local util = require("clingy.util")
 local adapter = require("clingy.adapter")
 local named = require("clingy.named")
 local form = require("clingy.form")
+local routing = require("clingy.routing")
 
 local M = {}
 
@@ -307,28 +308,17 @@ function M.parse(graph, argv)
         -- Non-option token: Child Command Transition or Positional Argument
 
         -- Section 22: Check child transition vs required positional minimums
-        local child_name = current_node.child_names_map[token]
-        local can_transition = false
+        local child_node = routing.edge(current_node, token, options_closed)
 
-        if child_name then
-          -- Check if all required positionals on current node have satisfied their minimums
-          local req_satisfied = true
-          for _, arg_decl in ipairs(current_node.args) do
-            local cnt = occurrence_counts[arg_decl] or 0
-            if cnt < (arg_decl.occurrence.min or 1) then
-              req_satisfied = false
-              break
-            end
+        if child_node then
+          local missing = routing.first_missing_prefix(current_node, occurrence_counts)
+          if missing then
+            error(string.format(
+              "Missing required argument '%s' before command '%s' on command '%s'",
+              missing.name or missing.result_key, token, current_node.name))
           end
-
-          if req_satisfied then
-            can_transition = true
-          end
-        end
-
-        if can_transition then
           -- Transition to child command!
-          current_node = current_node.children[child_name]
+          current_node = child_node
           active_segment = add_route_segment(current_node)
           i = i + 1
         else
@@ -513,6 +503,10 @@ function M.parse(graph, argv)
         seg.args[flag.result_key] = false
       end
     end
+  end
+
+  if current_node.children and next(current_node.children) ~= nil and not current_node.handler then
+    error(string.format("Missing command for router node '%s'", current_node.name))
   end
 
   -- Also populate default false for inherited flags on root/active segments if not set

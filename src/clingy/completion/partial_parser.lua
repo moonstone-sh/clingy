@@ -10,6 +10,7 @@ local named = require("clingy.named")
 local form = require("clingy.form")
 local form_cursor = require("clingy.completion.form_cursor")
 local providers = require("clingy.completion.providers")
+local routing = require("clingy.routing")
 
 local M = {}
 
@@ -19,6 +20,7 @@ M.FOCUS = {
   OPTION_VALUE = "FOCUS_OPTION_VALUE",
   POSITIONAL = "FOCUS_POSITIONAL",
   PASSTHROUGH = "FOCUS_PASSTHROUGH",
+  INVALID = "FOCUS_INVALID",
 }
 
 ---Traverses the router to identify parsing state and cursor focus.
@@ -53,11 +55,18 @@ function M.parse_partial(router, words, cword)
   local route = { current_node }
   local parsed_args = {}
   local option_counts = {}
+  local positional_counts = {}
   local consumed_positionals = 0
   local ordered_cursor = 1
   local in_passthrough = false
   local waiting_option = nil
   local active_form = nil
+  local options_closed = false
+  local routing_error = nil
+
+  local function note_positional(binding)
+    positional_counts[binding] = (positional_counts[binding] or 0) + 1
+  end
 
   local function update_ordered_cursor(node, binding)
     if node.mode == "ordered" and node.declarations_order then
@@ -80,6 +89,7 @@ function M.parse_partial(router, words, cword)
       elseif current_node.end_capture and token == current_node.end_capture.terminator then
         in_passthrough = true
       elseif token == "--" then
+        options_closed = true
         if current_node.end_capture and current_node.end_capture.legacy_passthrough then
           in_passthrough = true
         end
@@ -90,7 +100,7 @@ function M.parse_partial(router, words, cword)
         option_counts[rk] = (option_counts[rk] or 0) + 1
         update_ordered_cursor(current_node, waiting_option.binding)
         waiting_option = nil
-      elseif token:sub(1, 1) == "-" then
+      elseif not options_closed and token:sub(1, 1) == "-" then
         -- Match runtime's exact-alias precedence and '=' / ':' attachments.
         local bindings = current_node.visible_options_by_name
         local opt_name, opt_val, separator_pos = named.split_attached_value(token, bindings)
@@ -116,17 +126,18 @@ function M.parse_partial(router, words, cword)
         end
       else
         -- Token does not start with '-': check subcommand transition
-        local child_node = current_node.children and current_node.children[token]
-        if not child_node and current_node.child_names_map and current_node.child_names_map[token] then
-          local child_id = current_node.child_names_map[token]
-          child_node = (router.nodes or (router._graph and router._graph.nodes))[child_id]
-        end
+        local child_node = routing.edge(current_node, token, options_closed)
 
-        if child_node then
+        if child_node and routing.prefix_complete(current_node, positional_counts) then
           current_node = child_node
           table.insert(route, current_node)
           consumed_positionals = 0
           ordered_cursor = 1
+        elseif child_node then
+          local missing = routing.first_missing_prefix(current_node, positional_counts)
+          routing_error = string.format(
+            "Missing required argument '%s' before command '%s' on command '%s'",
+            missing.name or missing.result_key, token, current_node.name)
         else
           -- Positional argument consumption
           local pos_binding = current_node.args and current_node.args[consumed_positionals + 1]
@@ -135,6 +146,7 @@ function M.parse_partial(router, words, cword)
               local fields, next_i = form.match(pos_binding.form, words, i)
               if fields and next_i <= cword then
                 consumed_positionals = consumed_positionals + 1
+                note_positional(pos_binding)
                 parsed_args[pos_binding.result_key] = fields
                 update_ordered_cursor(current_node, pos_binding)
                 i = next_i - 1
@@ -144,6 +156,7 @@ function M.parse_partial(router, words, cword)
               end
             else
               consumed_positionals = consumed_positionals + 1
+              note_positional(pos_binding)
               parsed_args[pos_binding.result_key] = token
               update_ordered_cursor(current_node, pos_binding)
             end
@@ -162,7 +175,9 @@ function M.parse_partial(router, words, cword)
   local inline_separator = nil
   local prefix = current_word
 
-  if in_passthrough then
+  if routing_error then
+    focus = M.FOCUS.INVALID
+  elseif in_passthrough then
     focus = M.FOCUS.PASSTHROUGH
   elseif waiting_option then
     focus = M.FOCUS.OPTION_VALUE
@@ -231,13 +246,14 @@ function M.parse_partial(router, words, cword)
     end
 
     local has_children = current_node.children and next(current_node.children) ~= nil
+    local prefix_complete = routing.prefix_complete(current_node, positional_counts)
 
     if focus == M.FOCUS.POSITIONAL then
       -- A form capture has already selected the completion target.
-    elseif has_children and pos_binding then
-      focus = "FOCUS_SUBCOMMAND_OR_POSITIONAL"
+    elseif has_children and not prefix_complete then
+      focus = M.FOCUS.POSITIONAL
       target_binding = pos_binding
-    elseif has_children then
+    elseif has_children and not options_closed then
       focus = M.FOCUS.SUBCOMMAND
     elseif pos_binding then
       focus = M.FOCUS.POSITIONAL
@@ -249,10 +265,12 @@ function M.parse_partial(router, words, cword)
         focus = M.FOCUS.POSITIONAL
         target_binding = last_arg
       else
-        if current_node.visible_options_by_name and next(current_node.visible_options_by_name) ~= nil then
+        if not options_closed and current_node.visible_options_by_name and next(current_node.visible_options_by_name) ~= nil then
           focus = M.FOCUS.OPTION_NAME
-        else
+        elseif not options_closed then
           focus = M.FOCUS.SUBCOMMAND
+        else
+          focus = M.FOCUS.PASSTHROUGH
         end
       end
     end
@@ -272,6 +290,7 @@ function M.parse_partial(router, words, cword)
     consumed_positionals = consumed_positionals,
     option_counts = option_counts,
     ordered_cursor = ordered_cursor,
+    routing_error = routing_error,
   }
 end
 
@@ -307,6 +326,10 @@ function M.resolve_candidates(parse_result)
   end
 
   if focus == M.FOCUS.PASSTHROUGH then
+    return resp
+  end
+
+  if focus == M.FOCUS.INVALID then
     return resp
   end
 
@@ -395,7 +418,7 @@ function M.resolve_candidates(parse_result)
     return resp
   end
 
-  if focus == M.FOCUS.SUBCOMMAND or focus == "FOCUS_SUBCOMMAND_OR_POSITIONAL" then
+  if focus == M.FOCUS.SUBCOMMAND then
     -- Add child command candidates
     if node.children then
       for child_name, child_node in pairs(node.children) do
@@ -410,7 +433,7 @@ function M.resolve_candidates(parse_result)
     end
   end
 
-  if focus == M.FOCUS.POSITIONAL or focus == "FOCUS_SUBCOMMAND_OR_POSITIONAL" then
+  if focus == M.FOCUS.POSITIONAL then
     if parse_result.target_binding then
       local provider = discovery.resolve_binding_completion(parse_result.target_binding)
       if provider then

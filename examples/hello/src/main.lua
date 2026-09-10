@@ -8,7 +8,7 @@ local CLI = c.create({
   name = "hello",
   version = "0.1.0",
   description = "A small positional greeting",
-  c.root(c.node({
+  root = c.node({
     c.flag({ key = "shout", aliases = { "--shout" } }),
     c.arg({ key = "name", schema = v.string() }),
     c.run(function(ctx)
@@ -20,7 +20,7 @@ local CLI = c.create({
       ctx:result(result, greeting)
       return result
     end),
-  })),
+  }),
 })
 
 os.exit(CLI:run(arg or {}))

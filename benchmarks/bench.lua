@@ -26,7 +26,7 @@ local function make_cli_config()
   return {
     name = "bench",
     version = "1.0.0",
-    c.root(c.node({
+    root = c.node({
       c.inherit(
         c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }),
         c.flag({ key = "quiet", aliases = { "-q", "--quiet" } }),
@@ -41,7 +41,7 @@ local function make_cli_config()
         c.flag({ key = "force", aliases = { "-f", "--force" } }),
         c.arg({ key = "target", schema = v.string() }),
       }),
-    })),
+    }),
   }
 end
 
@@ -67,14 +67,14 @@ end)
 -- Benchmark 4: Short Flag Clusters
 local tar_app = c.create({
   name = "tar",
-  c.root(c.node({
+  root = c.node({
     c.short_clusters(),
     c.flag({ key = "extract", aliases = { "-x", "--extract" } }),
     c.flag({ key = "force", aliases = { "-f", "--force" } }),
     c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }),
     c.flag({ key = "gzip", aliases = { "-z", "--gzip" } }),
     c.arg({ key = "archive", schema = v.string() }),
-  })),
+  }),
 })
 local cluster_argv = { "-xfvz", "bundle.tar.gz" }
 
@@ -85,13 +85,13 @@ end)
 -- Benchmark 5: Ordered Pipeline Parsing
 local legacy_app = c.create({
   name = "legacy",
-  c.root(c.node({
+  root = c.node({
     c.ordered(),
     c.flag({ key = "prepare", aliases = { "--prepare" } }),
     c.arg({ key = "source", schema = v.string() }),
     c.flag({ key = "commit", aliases = { "--commit" } }),
     c.arg({ key = "destination", schema = v.string() }),
-  })),
+  }),
 })
 local ordered_argv = { "--prepare", "in.dat", "--commit", "out.dat" }
 

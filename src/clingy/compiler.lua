@@ -47,19 +47,13 @@ function M.normalize(config)
     error("c.create requires a configuration table")
   end
 
-  local root_ast = nil
-  if config[1] and type(config[1]) == "table" and config[1]._tag == "root" then
-    root_ast = config[1].node
-  elseif config.root and type(config.root) == "table" then
-    if config.root._tag == "root" then
-      root_ast = config.root.node
-    elseif config.root._tag == "node" then
-      root_ast = config.root
-    end
+  if config[1] ~= nil then
+    error("c.create: declarations do not belong directly on the app; use root = c.node({ ... })")
   end
 
-  if not root_ast then
-    error("c.create: root node not specified. Use c.root(c.node({...}))")
+  local root_ast = config.root
+  if type(root_ast) ~= "table" or root_ast._tag ~= "node" then
+    error("c.create: root must be a c.node({ ... })")
   end
 
   local nodes = {}
@@ -387,6 +381,21 @@ function M.validate_graph(graph)
       end
     end
 
+    -- A command edge is a reserved word at this node.  Positionals before
+    -- that edge must therefore be a fixed required prefix: otherwise a word
+    -- could be both data and a child command, leaving parsing and completion
+    -- to guess differently.
+    if #node.child_order > 0 then
+      for _, positional in ipairs(positional_bindings) do
+        local occurrence = positional.occurrence or {}
+        if occurrence.min ~= 1 or occurrence.max ~= 1 then
+          error(string.format(
+            "Compilation Error: Node '%s' has child commands, so positional '%s' must occur exactly once before routing",
+            node.name, positional.name))
+        end
+      end
+    end
+
     -- Child name and alias collision checks
     local child_names_map = {}
     for _, child_name in ipairs(node.child_order) do
@@ -528,9 +537,15 @@ function M.compile_router(graph)
     }
 
     local children = {}
+    local child_edges = {}
     for _, child_name in ipairs(node.child_order) do
       local child_id = node.id .. "." .. child_name
-      children[child_name] = build_compiled_node(child_id, child_inherited_ctx)
+      local child = build_compiled_node(child_id, child_inherited_ctx)
+      children[child_name] = child
+      child_edges[child_name] = child
+      for _, alias in ipairs(child.aliases or {}) do
+        child_edges[alias] = child
+      end
     end
 
     local compiled_node = {
@@ -543,7 +558,9 @@ function M.compile_router(graph)
       visible_options_by_name = visible_bindings_by_name,
       inherited_options_by_name = inherited_ctx.options,
       children = children,
+      child_edges = child_edges,
       child_names_map = node.children,
+      aliases = node.aliases,
       mode = effective_mode,
       short_clusters = effective_short_clusters,
       passthrough_key = node.passthrough_key,

@@ -15,7 +15,7 @@ describe("Presentation Host Signal Handoff & Coordination (HOST-INV-13, 14)", fu
     local app = c.create({
       name = "signal-host-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.signals({
           interrupt = function(ctx, evt)
             interrupt_handled = true
@@ -25,7 +25,7 @@ describe("Presentation Host Signal Handoff & Coordination (HOST-INV-13, 14)", fu
         c.run(function(ctx)
           return { status = "running" }
         end),
-      })),
+      }),
     })
 
     local parsed = app:parse({})
@@ -56,12 +56,12 @@ describe("Presentation Host Signal Handoff & Coordination (HOST-INV-13, 14)", fu
     local app = c.create({
       name = "prompt-signal-app",
       presentation = test_host,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           local ans = ctx:confirm("Proceed with deployment?", { default = false })
           return { confirmed = ans }
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -77,7 +77,7 @@ describe("Presentation Host Signal Handoff & Coordination (HOST-INV-13, 14)", fu
     local app = c.create({
       name = "term-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           ctx:scope(function(s)
             s:defer(function()
@@ -85,7 +85,7 @@ describe("Presentation Host Signal Handoff & Coordination (HOST-INV-13, 14)", fu
             end)
           end)
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})

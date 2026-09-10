@@ -8,7 +8,7 @@ local CLI = c.create({
   name = "advanced-grammar",
   version = "0.1.0",
   description = "Structured forms, option forms, and forwarding",
-  c.root(c.node({
+  root = c.node({
     c.arg({
       key = "target",
       form = c.sequence({
@@ -48,7 +48,7 @@ local CLI = c.create({
       ))
       return result
     end),
-  })),
+  }),
 })
 
 local argv = arg or {}

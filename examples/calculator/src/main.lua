@@ -25,7 +25,7 @@ local CLI = c.create({
   name = "calculator",
   version = "0.1.0",
   description = "A base-aware two-operand calculator",
-  c.root(c.node({
+  root = c.node({
     c.inherit({ c.flag({ key = "json", aliases = { "--json" } }) }),
     c.option({
       key = "defines", aliases = { "-D" }, occurs = { min = 0, max = "many" },
@@ -69,7 +69,7 @@ local CLI = c.create({
          result_decimal = result,
        }
     end),
-  })),
+  }),
 })
 
 os.exit(CLI:run(arg or {}))

@@ -42,7 +42,7 @@ describe("Invariant 19: Distinct Signal Semantics (INT vs TERM)", function()
 
       local app = c.create({
         name = "test-signals",
-        c.root(c.node({
+        root = c.node({
           worker = c.node({
             c.signals({
               interrupt = function(ctx, evt)
@@ -60,7 +60,7 @@ describe("Invariant 19: Distinct Signal Semantics (INT vs TERM)", function()
 
             c.run(function(ctx) return ctx.args end),
           }),
-        })),
+        }),
       })
 
       local parsed = app:parse({ "worker" })
@@ -92,7 +92,7 @@ describe("Invariant 19: Distinct Signal Semantics (INT vs TERM)", function()
 
       local app = c.create({
         name = "test-signal-hierarchy",
-        c.root(c.node({
+        root = c.node({
           c.signals({
             interrupt = function(ctx, evt)
               parent_int_called = true
@@ -110,7 +110,7 @@ describe("Invariant 19: Distinct Signal Semantics (INT vs TERM)", function()
 
             c.run(function(ctx) return ctx.args end),
           }),
-        })),
+        }),
       })
 
       local parsed = app:parse({ "task" })

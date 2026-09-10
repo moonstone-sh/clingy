@@ -10,7 +10,7 @@ local CLI = c.create({
     version = "1.0.0",
     description = "Subprocess & Lifecycle Scopes Example",
 
-    c.root(c.node({
+    root = c.node({
         c.inherit({ c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }) }),
 
         worker = c.node({
@@ -75,7 +75,7 @@ local CLI = c.create({
                 io.write(script, "\n")
             end),
         }, { description = "Generate shell completion script for bash, zsh, fish, or powershell" }),
-    })),
+    }),
 })
 
 local args = arg or {}

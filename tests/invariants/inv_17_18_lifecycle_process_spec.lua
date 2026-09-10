@@ -99,7 +99,7 @@ describe("Invariant 17 & 18: Lifecycle DAG and Managed Process Supervision", fun
 
       local app = c.create({
         name = "test-spawn-cli",
-        c.root(c.node({
+        root = c.node({
           c.run(function(ctx)
             local p = ctx:spawn({
               argv = { "echo", "hello-from-clingy" },
@@ -110,7 +110,7 @@ describe("Invariant 17 & 18: Lifecycle DAG and Managed Process Supervision", fun
             captured_out = out
             assert.equal(p:state(), "reaped")
           end),
-        })),
+        }),
       })
 
       local code = app:run({}, { capture = true })

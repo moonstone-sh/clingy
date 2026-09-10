@@ -5,7 +5,7 @@ local app_mod = require("clingy.app")
 local c = {}
 
 ---Compiles a declarative CLI configuration into an executable CLI App.
----Section 3: local CLI = c.create({ name = "...", version = "...", c.root(c.node({...})) })
+---The root grammar is declared as `root = c.node({ ... })`.
 ---@param config table App configuration with root node and metadata
 ---@return table Clingy App instance
 function c.create(config)
@@ -36,7 +36,6 @@ function c.inspect(target)
 end
 
 -- DSL constructors
-c.root = dsl.root
 c.node = dsl.node
 c.group = dsl.group
 c.inherit = dsl.inherit

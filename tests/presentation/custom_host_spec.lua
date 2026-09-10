@@ -57,14 +57,14 @@ describe("Custom Presentation Host Integration (HOST-INV-03, 17)", function()
     local app = c.create({
       name = "custom-dashboard",
       presentation = my_host,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           ctx:span("compilation", function()
             ctx:log("info", "Compiling kernel")
           end)
           ctx:result({ summary = "Kernel built successfully" })
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -92,12 +92,12 @@ describe("Custom Presentation Host Integration (HOST-INV-03, 17)", function()
     local app = c.create({
       name = "minimal-host-app",
       presentation = minimal_host,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           ctx:log("info", "Minimal message")
           return "done"
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})

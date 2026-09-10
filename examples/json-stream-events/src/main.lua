@@ -10,7 +10,7 @@ local CLI = c.create({
     version = "2.4.0",
     description = "Deterministic Build CLI with JSON Stream Support",
 
-    c.root(c.node({
+    root = c.node({
         c.inherit({
             c.flag({ key = "json", aliases = { "--json" } }),
             c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }),
@@ -56,7 +56,7 @@ local CLI = c.create({
                 io.write(script, "\n")
             end),
         }, { description = "Generate shell completion script for bash, zsh, fish, or powershell" }),
-    })),
+    }),
 })
 
 local args = arg or {}

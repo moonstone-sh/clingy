@@ -13,7 +13,7 @@ describe("Canonical Event Ingestion (HOST-INV-04)", function()
       name = "event-app",
       version = "2.0.0",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           ctx:span("phase-1", function()
             ctx:log("info", "Processing payload", { key = "val" })
@@ -22,7 +22,7 @@ describe("Canonical Event Ingestion (HOST-INV-04)", function()
           end)
           ctx:result({ count = 42 })
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})

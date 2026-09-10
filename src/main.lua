@@ -8,7 +8,7 @@ app = c.create({
   version = "0.5.0",
   description = "Deterministic Declarative CLI Engine for Lua",
 
-  c.root(c.node({
+  root = c.node({
     c.inherit({ c.flag({ key = "help", aliases = { "-h", "--help" } }) }),
 
     c.run(function(ctx)
@@ -51,7 +51,7 @@ app = c.create({
     }, {
       description = "Initialize LuaLS IDE plugin configuration in .luarc.json",
     }),
-  })),
+  }),
 })
 
 local exit_code = app:run(arg)

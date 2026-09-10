@@ -16,7 +16,7 @@ local CLI = c.create({
 	version = "0.1.0",
 	description = "Meteorite HTTP & Microservice Framework CLI",
 
-	c.root(c.node({
+	root = c.node({
 		-- Root inheritance: passed down to all descendants
 		c.inherit(c.interspersed(), c.short_clusters(), c.flag({ key = "verbose", aliases = { "-v", "--verbose" } }), c.flag({ key = "quiet", aliases = { "-q", "--quiet" } })),
 
@@ -124,7 +124,7 @@ local CLI = c.create({
 		}, {
 			description = "Generate shell completion script for bash, zsh, fish, or powershell",
 		}),
-	})),
+	}),
 })
 
 -- If run directly from terminal

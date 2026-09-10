@@ -5,7 +5,7 @@ local app
 app = c.create({
   name = "clingy-example",
   version = "0.4.0",
-  c.root(c.node({
+  root = c.node({
     chain = c.node({
       c.flag({ key = "ready", aliases = { "--first-flag-completed" } }),
       c.option({
@@ -40,7 +40,7 @@ app = c.create({
         io.write(ctx.app:completion_script(ctx.args.shell, "clingy-example"), "\n")
       end),
     }),
-  })),
+  }),
 })
 
 os.exit(app:run(arg) or 0)

@@ -12,7 +12,7 @@ describe("Interactive Subprocess Terminal Handoff (HOST-INV-09)", function()
     local app = c.create({
       name = "spawn-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           local proc = ctx:spawn({
             argv = { "echo", "interactive-test" },
@@ -21,7 +21,7 @@ describe("Interactive Subprocess Terminal Handoff (HOST-INV-09)", function()
           proc:wait()
           return "done"
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -49,7 +49,7 @@ describe("Interactive Subprocess Terminal Handoff (HOST-INV-09)", function()
     local app = c.create({
       name = "capture-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           local proc = ctx:spawn({
             argv = { "echo", "capture-test" },
@@ -57,7 +57,7 @@ describe("Interactive Subprocess Terminal Handoff (HOST-INV-09)", function()
           })
           proc:wait()
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -75,7 +75,7 @@ describe("Interactive Subprocess Terminal Handoff (HOST-INV-09)", function()
     local app = c.create({
       name = "fail-suspend-app",
       presentation = failing_host,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           local proc = ctx:spawn({
             argv = { "echo", "should-not-run" },
@@ -84,7 +84,7 @@ describe("Interactive Subprocess Terminal Handoff (HOST-INV-09)", function()
           proc:wait()
           child_executed = true
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})

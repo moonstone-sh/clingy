@@ -10,7 +10,7 @@ local CLI = c.create({
     version = "1.0.0",
     description = "Demonstration of Clingy Grammar Modes & Delimiters",
 
-    c.root(c.node({
+    root = c.node({
         -- Mode 1: Interspersed (default modern CLI mode)
         -- Options may appear anywhere relative to positionals
         inter = c.node({
@@ -75,7 +75,7 @@ local CLI = c.create({
                 io.write(script, "\n")
             end),
         }, { description = "Generate shell completion script for bash, zsh, fish, or powershell" }),
-    })),
+    }),
 })
 
 local args = arg or {}

@@ -13,12 +13,12 @@ describe("Presentation Host Prompt Protocol (HOST-INV-14)", function()
     local app = c.create({
       name = "confirm-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           local res = ctx:confirm("Apply database migrations?", { default = false, timeout_ms = 5000 })
           return { confirmed = res }
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -38,7 +38,7 @@ describe("Presentation Host Prompt Protocol (HOST-INV-14)", function()
     local app = c.create({
       name = "custom-prompt-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           local target = ctx:prompt({
             type = "text",
@@ -47,7 +47,7 @@ describe("Presentation Host Prompt Protocol (HOST-INV-14)", function()
           })
           return { target = target }
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -65,7 +65,7 @@ describe("Presentation Host Prompt Protocol (HOST-INV-14)", function()
     local app = c.create({
       name = "fallback-confirm-app",
       presentation = null_h,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           local c1 = ctx:confirm("Delete everything?") -- no default -> false
           local c2 = ctx:confirm("Keep backup?", { default = true }) -- default true -> true
@@ -75,7 +75,7 @@ describe("Presentation Host Prompt Protocol (HOST-INV-14)", function()
           assert.equal(c3, false)
           return { c1 = c1, c2 = c2, c3 = c3 }
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -88,12 +88,12 @@ describe("Presentation Host Prompt Protocol (HOST-INV-14)", function()
     local app = c.create({
       name = "fallback-text-app",
       presentation = null_h,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           local text_val = ctx:prompt({ type = "text", prompt = "Username", default = "guest" })
           assert.equal(text_val, "guest")
         end),
-      })),
+      }),
     })
     local exit_code = app:run({})
     assert.equal(exit_code, 0)
@@ -102,11 +102,11 @@ describe("Presentation Host Prompt Protocol (HOST-INV-14)", function()
     local app_error = c.create({
       name = "fallback-text-error-app",
       presentation = c.null_host(),
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           ctx:prompt({ type = "text", prompt = "Password without default" })
         end),
-      })),
+      }),
     })
     local exit_code_err = app_error:run({})
     assert.equal(exit_code_err, 1)
@@ -120,14 +120,14 @@ describe("Presentation Host Prompt Protocol (HOST-INV-14)", function()
     local app = c.create({
       name = "multi-prompt-app",
       presentation = rec,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           local p1 = ctx:confirm("Step 1?")
           local p2 = ctx:prompt({ type = "text", prompt = "Target env?" })
           local p3 = ctx:confirm("Dry run?")
           return { p1 = p1, p2 = p2, p3 = p3 }
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -141,12 +141,12 @@ describe("Presentation Host Prompt Protocol (HOST-INV-14)", function()
     local app = c.create({
       name = "fail-prompt-app",
       presentation = failing_host,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           ctx:confirm("Deploy now?")
           return "unreachable"
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})

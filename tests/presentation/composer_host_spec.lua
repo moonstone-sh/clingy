@@ -11,14 +11,14 @@ describe("Composer Presentation Host Modes & Options (HOST-INV-02, 13, 14, 15, 1
     local app = c.create({
       name = "fancy-app",
       presentation = comp,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           ctx:log("info", "Starting fancy demo")
           ctx:progress("task1", 50, "Halfway done")
           ctx:milestone("Step 1 complete")
           ctx:result("Success payload")
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -37,7 +37,7 @@ describe("Composer Presentation Host Modes & Options (HOST-INV-02, 13, 14, 15, 1
     local app = c.create({
       name = "plain-app",
       presentation = comp,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           ctx:log("info", "Compiling assets")
           ctx:progress("comp", 10, "Tick 10")
@@ -45,7 +45,7 @@ describe("Composer Presentation Host Modes & Options (HOST-INV-02, 13, 14, 15, 1
           ctx:progress("comp", 30, "Tick 30")
           ctx:milestone("Compilation finished")
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -65,14 +65,14 @@ describe("Composer Presentation Host Modes & Options (HOST-INV-02, 13, 14, 15, 1
     local app = c.create({
       name = "quiet-app",
       presentation = comp,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           ctx:log("info", "Hidden info log")
           ctx:progress("task", 50, "Hidden progress")
           ctx:log("error", "Visible error log")
           ctx:result("Final result output")
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -95,12 +95,12 @@ describe("Composer Presentation Host Modes & Options (HOST-INV-02, 13, 14, 15, 1
     local app = c.create({
       name = "json-app",
       presentation = comp_ndjson,
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           ctx:log("info", "Structured telemetry event")
           ctx:result({ status = "ready", code = 200 })
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({})
@@ -117,14 +117,14 @@ describe("Composer Presentation Host Modes & Options (HOST-INV-02, 13, 14, 15, 1
     local comp = c.composer({ capture = true })
     local app = c.create({
       name = "compat-app",
-      c.root(c.node({
+      root = c.node({
         c.run(function(ctx)
           assert.truthy(ctx.presentation, "ctx.presentation exists")
           assert.truthy(ctx.composer, "ctx.composer alias exists")
           assert.equal(ctx.presentation, ctx.composer, "ctx.composer is an alias to ctx.presentation")
           ctx:log("info", "Compatibility verified")
         end),
-      })),
+      }),
     })
 
     local exit_code = app:run({}, { presentation = comp, composer_mode = "quiet" })

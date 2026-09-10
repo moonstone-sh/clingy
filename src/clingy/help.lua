@@ -33,7 +33,7 @@ local function format_usage(app, node, path_segments)
   end
 
   if node.children and next(node.children) ~= nil then
-    table.insert(parts, "[COMMAND]")
+    table.insert(parts, node.handler and "[COMMAND]" or "<COMMAND>")
   end
 
   if node.passthrough_key then
@@ -187,12 +187,14 @@ function M.format_help(app, node, path_segments)
 
     for _, c_name in ipairs(child_names) do
       local child = node.children[c_name]
-      local c_desc = (child.metadata and child.metadata.description) or ""
-      local aliases_str = ""
-      if child.aliases and #child.aliases > 0 then
-        aliases_str = " (aliases: " .. table.concat(child.aliases, ", ") .. ")"
+      if not (child.metadata and child.metadata.hidden) then
+        local c_desc = (child.metadata and child.metadata.description) or ""
+        local aliases_str = ""
+        if child.aliases and #child.aliases > 0 then
+          aliases_str = " (aliases: " .. table.concat(child.aliases, ", ") .. ")"
+        end
+        table.insert(lines, string.format("  %-22s %s%s", c_name, c_desc, aliases_str))
       end
-      table.insert(lines, string.format("  %-22s %s%s", c_name, c_desc, aliases_str))
     end
     table.insert(lines, "")
   end
