@@ -15,7 +15,12 @@ moon exec ballad play tests/fixtures/packaged-cli/partiture.lua
 package_version="$(awk '
   /^\[package\]$/ { in_package = 1; next }
   /^\[/ { in_package = 0 }
-  in_package && /^version = / { gsub(/.*"|".*/, ""); print; exit }
+  in_package && /^version = / {
+    sub(/^version = "/, "")
+    sub(/".*/, "")
+    print
+    exit
+  }
 ' moonstone.toml)"
 test -n "$package_version"
 
