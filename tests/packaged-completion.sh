@@ -12,7 +12,14 @@ fi
 
 moon exec ballad play tests/fixtures/packaged-cli/partiture.lua
 
-archive="dist/registry/clingy-example/clingy-example-0.4.0-any.tar.gz"
+package_version="$(awk '
+  /^\[package\]$/ { in_package = 1; next }
+  /^\[/ { in_package = 0 }
+  in_package && /^version = / { gsub(/.*"|".*/, ""); print; exit }
+' moonstone.toml)"
+test -n "$package_version"
+
+archive="dist/registry/clingy-example/clingy-example-${package_version}-any.tar.gz"
 test -f "$archive"
 
 fixture_dir="$(mktemp -d /tmp/clingy-packaged-completion.XXXXXX)"
@@ -43,7 +50,7 @@ moon registry push "$registry" \
 (
   cd "$project"
   moon registry add --name local --url "$registry"
-  moon add local:moonstone/clingy-example@0.4.0 --bin
+  moon add "local:moonstone/clingy-example@${package_version}" --bin
 )
 
 export PATH="$project/.moonstone/env/bin:$PATH"
