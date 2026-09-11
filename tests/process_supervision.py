@@ -252,6 +252,18 @@ class ProcessSupervision(unittest.TestCase):
         os.write(session.master, b"\x04")
         session.stopped(0)
 
+    def test_child_status_change_does_not_masquerade_as_terminal_eof(self):
+        session = Session(self, tty=True).ready()
+        worker = int((session.root / "worker.pid").read_text())
+        os.kill(worker, signal.SIGSTOP)
+        time.sleep(0.05)
+        os.kill(worker, signal.SIGCONT)
+        time.sleep(1.2)
+        self.assertIsNone(session.poll(), session.output())
+        self.assertNotIn("Bad file descriptor", session.output())
+        os.write(session.master, b"\x04")
+        session.stopped(0)
+
     def test_redirected_stdin_eof_does_not_stop_service(self):
         session = Session(self).ready()
         time.sleep(1.2)

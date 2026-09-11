@@ -5,7 +5,7 @@ local init_cmd = require("clingy.cli.init")
 local app
 app = c.create({
   name = "clingy",
-  version = "0.5.0",
+  version = "0.6.2",
   description = "Deterministic Declarative CLI Engine for Lua",
 
   root = c.node({
@@ -21,7 +21,6 @@ app = c.create({
     end),
 
     init = c.node({
-      c.option({ key = "config", aliases = { "-c", "--config" }, value = { schema = v.string() } }),
       c.flag({ key = "yes", aliases = { "-y", "--yes" } }),
 
       c.run(function(ctx)
@@ -31,7 +30,6 @@ app = c.create({
         end
 
         local res, err = init_cmd.run({
-          config = ctx.args.config,
           yes = ctx.args.yes,
         })
         if not res then

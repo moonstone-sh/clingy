@@ -45,6 +45,8 @@ requested_exit=
 cleaning=0
 have_lock=0
 owner_pid=$PPID
+terminal_fd_open=0
+child_event=0
 
 signal_group() {
   [ -n "$child_pid" ] && kill -"$1" -- "-$child_pid" 2>/dev/null || true
@@ -55,10 +57,10 @@ on_signal() {
     signal_group KILL
   fi
   requested_exit=$1
-  # Bash can restart a blocking `read` after a trap whose handler returns.
-  # Closing only the supervisor's stdin wakes it without exposing stdin to the
-  # headless child.
-  exec 0<&-
+  if [ "$terminal_fd_open" -eq 1 ]; then
+    exec 3<&-
+    terminal_fd_open=0
+  fi
 }
 
 cleanup() {
@@ -99,19 +101,23 @@ if [ -n "$lock_dir" ]; then
   printf '%s\n' "$$" > "$lock_dir/owner.pid"
 fi
 
-# Job control gives this child its own process group even without a TTY.
-# Only the foreground supervisor reads the terminal; the child runs headless.
+# Job control gives the headless service its own process group even without a
+# TTY. Only the foreground supervisor reads terminal input.
 set -m
 CLINGY_SUPERVISED=1 CLINGY_SUPERVISOR_PID=$$ "$@" </dev/null &
 child_pid=$!
 
-# A terminal supervisor may be blocked in read when its direct child exits.
-# Wake it; the loop distinguishes this from EOF by checking child liveness.
-trap 'exec 0<&-' CHLD
+if [ "$watch_stdin" -eq 1 ] && [ -t 0 ]; then
+  exec 3<&0
+  terminal_fd_open=1
+fi
 
-# A terminal read also prevents the main loop from polling its original
-# parent. This headless monitor converts parent loss into the same HUP path
-# used by a terminal hangup; cleanup terminates and reaps the monitor itself.
+# Wake a terminal read when the direct child changes state. The marker lets the
+# loop distinguish this internal wakeup from Ctrl-D. fd 0 itself stays intact.
+trap 'child_event=1; if [ "$terminal_fd_open" -eq 1 ]; then exec 3<&-; terminal_fd_open=0; fi' CHLD
+
+# The parent monitor converts parent loss into the same HUP path used by a
+# terminal hangup; cleanup terminates and reaps the monitor itself.
 if [ "$owner_pid" -gt 1 ]; then
   (
     while kill -0 "$owner_pid" 2>/dev/null; do sleep 0.1; done
@@ -131,12 +137,25 @@ while [ -z "$requested_exit" ]; do
     break
   fi
   if [ "$watch_stdin" -eq 1 ] && [ -t 0 ]; then
-    IFS= read -r ignored
-    read_status=$?
-    # This read has no timeout: status 1 is therefore a real terminal EOF.
-    # Signals and child exit interrupt it. Confirm the child is still alive so
-    # a CHLD interruption cannot be mistaken for Ctrl-D.
-    if [ "$read_status" -eq 1 ] && kill -0 "$child_pid" 2>/dev/null && [ -z "$requested_exit" ]; then requested_exit=0; fi
+    child_event=0
+    if [ "$terminal_fd_open" -eq 0 ]; then
+      exec 3<&0
+      terminal_fd_open=1
+    fi
+    if [ "$child_event" -eq 0 ]; then
+      IFS= read -r -u 3 ignored 2>/dev/null
+      read_status=$?
+    else
+      read_status=0
+    fi
+    if [ "$child_event" -eq 1 ]; then
+      if kill -0 "$child_pid" 2>/dev/null && [ -z "$requested_exit" ]; then
+        exec 3<&0
+        terminal_fd_open=1
+      fi
+    elif [ "$read_status" -eq 1 ] && kill -0 "$child_pid" 2>/dev/null && [ -z "$requested_exit" ]; then
+      requested_exit=0
+    fi
   else
     sleep 0.1
   fi

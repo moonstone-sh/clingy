@@ -30,8 +30,10 @@ The supervisor gives its child a separate process group, closes the child's
 stdin, and keeps stdout and stderr inherited. It handles INT, TERM and HUP with
 exit statuses 130, 143 and 129. Terminal EOF exits with status 0 when `stdin_eof`
 is enabled. Redirected stdin EOF does not stop the child. The foreground owner
-reads terminal input without changing terminal modes; it does not forward input
-to an interactive application.
+reads terminal EOF through a duplicate descriptor. Child-status wakeups close
+and reopen only that duplicate, so they cannot be mistaken for Ctrl-D and never
+close or repurpose standard input. The supervisor does not change terminal modes
+or forward input to an interactive application.
 
 Normal command completion, command failure, cancellation and original-parent
 death all run the same cleanup. The owner sends TERM to the whole child group,

@@ -135,7 +135,7 @@ describe("table declarations and forms", function()
 
   it("infers LuaLS context fields from table declarations", function()
     local plugin = require("luals.plugin")
-    local transformed = plugin.process_text("", [[
+    local source = [[
 local c = require("clingy")
 local v = require("valua")
 return c.node({
@@ -144,9 +144,15 @@ return c.node({
   c.flag({ key = "verbose", aliases = { "-v" } }),
   c.run(function(ctx) return ctx.args end),
 })
-]])
+]]
+    local transformed = plugin.process_text("", source)
     assert.truthy(transformed:find("define: %(integer%)%[%]%|nil"))
     assert.truthy(transformed:find("name: string"))
     assert.truthy(transformed:find("verbose: boolean"))
+
+    local diffs = plugin.process_diffs("", source)
+    assert.equal(#diffs, 1)
+    assert.equal(diffs[1].finish, diffs[1].start - 1)
+    assert.truthy(diffs[1].text:find("---@cast ctx", 1, true) ~= nil)
   end)
 end)
