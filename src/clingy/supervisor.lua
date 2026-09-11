@@ -92,9 +92,67 @@ trap 'on_signal 143' TERM
 trap 'on_signal 129' HUP
 trap cleanup EXIT
 
-if [ -n "$lock_dir" ]; then
+owner_is_live() {
+  candidate=$1
+  case "$candidate" in
+    ''|*[!0-9]*|0|1) return 2 ;;
+  esac
+  if ! kill -0 "$candidate" 2>/dev/null; then
+    return 1
+  fi
+  # kill -0 succeeds for a zombie until its parent reaps it. A zombie no
+  # longer owns a session even though its PID still exists in the table.
+  candidate_state=$(ps -p "$candidate" -o stat= 2>/dev/null || true)
+  case "$candidate_state" in
+    Z*) return 1 ;;
+  esac
+  # If kill -0 succeeded but ps is unavailable or denied, ownership is
+  # unknown, not stale. Refusing to steal is the only safe choice.
+  return 0
+}
+
+claim_lock() {
+  mkdir -- "$lock_dir" 2>/dev/null && return 0
+
+  recorded_owner=
+  if [ -f "$lock_dir/owner.pid" ]; then
+    # `read` returns 1 for a final line without a newline even though it did
+    # populate the variable. Accept that common crash-written shape.
+    IFS= read -r recorded_owner < "$lock_dir/owner.pid" || [ -n "$recorded_owner" ] || recorded_owner=
+  fi
+  owner_is_live "$recorded_owner"
+  owner_status=$?
+  if [ "$owner_status" -eq 0 ]; then
+    printf '%s\n' "$label: session lock is owned by live pid $recorded_owner: $lock_dir" >&2
+    return 1
+  fi
+  if [ "$owner_status" -eq 2 ]; then
+    printf '%s\n' "$label: session lock has no trustworthy owner pid (${recorded_owner:-missing}): $lock_dir" >&2
+    return 1
+  fi
+
+  # Move the stale lock out of the contested pathname atomically. Never
+  # delete through $lock_dir after this point: another contender may have
+  # claimed that name already. The unique quarantine prevents a stale-lock
+  # reclaimer from deleting a newly-created live lock in a TOCTOU race.
+  stale_lock="$lock_dir.stale.$$"
+  if ! mv -- "$lock_dir" "$stale_lock" 2>/dev/null; then
+    printf '%s\n' "$label: session lock changed while reclaiming: $lock_dir" >&2
+    return 1
+  fi
+  rm -f -- "$stale_lock/owner.pid"
+  rmdir -- "$stale_lock" 2>/dev/null || true
+
   if ! mkdir -- "$lock_dir" 2>/dev/null; then
-    printf '%s\n' "$label: session lock exists: $lock_dir" >&2
+    printf '%s\n' "$label: session lock was claimed concurrently: $lock_dir" >&2
+    return 1
+  fi
+  printf '%s\n' "$label: reclaimed stale session lock from dead pid $recorded_owner" >&2
+  return 0
+}
+
+if [ -n "$lock_dir" ]; then
+  if ! claim_lock; then
     exit 1
   fi
   have_lock=1

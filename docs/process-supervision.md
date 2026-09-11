@@ -22,9 +22,12 @@ local script = require("clingy.process").supervisor_script({
 environment values are shell-quoted; environment keys must be identifiers.
 The caller creates the parent directories and writes the generated script.
 `cleanup_files` names individual files owned by this session, never directories.
-An optional atomic directory lock rejects simultaneous owners. A session killed
-with SIGKILL may leave its lock; inspect `owner.pid` before removing that stale
-lock. Existing locks are never reclaimed using a guessed process identity.
+An optional atomic directory lock rejects simultaneous live owners. If a
+session is killed with SIGKILL, the next invocation reads `owner.pid` and
+reclaims the lock only when that PID is conclusively absent or is a zombie.
+The stale directory is first moved to a unique quarantine name so concurrent
+reclaimers cannot delete a newly acquired lock. Missing, malformed, or
+otherwise ambiguous ownership metadata is never reclaimed automatically.
 
 The supervisor gives its child a separate process group, closes the child's
 stdin, and keeps stdout and stderr inherited. It handles INT, TERM and HUP with

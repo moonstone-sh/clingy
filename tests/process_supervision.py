@@ -310,6 +310,36 @@ class ProcessSupervision(unittest.TestCase):
         first.stopped(143)
         self.assertFalse(lock.exists())
 
+    def test_dead_owner_lock_is_reclaimed(self):
+        lock_root = tempfile.TemporaryDirectory(prefix="clingy-stale-lock-")
+        self.addCleanup(lock_root.cleanup)
+        lock = Path(lock_root.name) / "session.lock"
+        lock.mkdir()
+        dead_pid = 99999999
+        self.assertFalse(is_live(dead_pid))
+        (lock / "owner.pid").write_text(str(dead_pid))
+
+        session = Session(self, lock=lock).ready()
+        self.assertEqual((lock / "owner.pid").read_text().strip(), str(session.pid))
+        self.assertIn("reclaimed stale session lock", session.output())
+        os.kill(session.pid, signal.SIGTERM)
+        session.stopped(143)
+        self.assertFalse(lock.exists())
+
+    def test_ambiguous_lock_is_not_reclaimed(self):
+        lock_root = tempfile.TemporaryDirectory(prefix="clingy-ambiguous-lock-")
+        self.addCleanup(lock_root.cleanup)
+        lock = Path(lock_root.name) / "session.lock"
+        lock.mkdir()
+        (lock / "owner.pid").write_text("not-a-pid")
+
+        session = Session(self, lock=lock)
+        self.assertTrue(eventually(lambda: session.poll() is not None), session.output())
+        self.assertEqual(session.poll(), 1, session.output())
+        self.assertTrue(lock.exists())
+        self.assertEqual((lock / "owner.pid").read_text(), "not-a-pid")
+        self.assertFalse((session.root / "worker.pid").exists())
+
     def test_signal_during_startup(self):
         for delay in (0, 0.002, 0.005, 0.01, 0.02, 0.04):
             with self.subTest(delay=delay):
