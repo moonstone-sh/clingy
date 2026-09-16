@@ -153,4 +153,46 @@ describe("Shell Completion Backends", function()
     assert.truthy(out:find("D\tnofiles\t-\t-\t-", 1, true))
   end)
 
+  describe("Hidden Endpoint: --__moonstone-complete-script", function()
+    local app = c.create({
+      name = "stellar",
+      root = c.node({
+        c.run(function() end),
+      }),
+    })
+
+    local function captured_stdout()
+      local chunks = {}
+      return {
+        write = function(_, s) chunks[#chunks + 1] = s end,
+        text = function() return table.concat(chunks) end,
+      }
+    end
+
+    it("prints the same script as app:completion_script for the given shell", function()
+      local out = captured_stdout()
+      local exit_code = app:run({ "--__moonstone-complete-script", "bash" }, { stdout = out })
+      assert.equal(exit_code, 0)
+      assert.equal(out.text(), app:completion_script("bash"))
+    end)
+
+    it("honors an explicit cmd_path as the invocation target, distinct from the app's own registered name", function()
+      local out = captured_stdout()
+      app:run({ "--__moonstone-complete-script", "zsh", "renamed-binary" }, { stdout = out })
+      -- The completion registers under the app's own declared identity
+      -- ("stellar") regardless of cmd_path -- cmd_path only controls which
+      -- binary the generated bridge invokes to actually query completions
+      -- (e.g. when the registered command name is a wrapper/alias and the
+      -- real Clingy-speaking binary lives elsewhere).
+      assert.truthy(out.text():find("#compdef stellar"))
+      assert.truthy(out.text():find("'renamed%-binary' %-%-__moonstone%-complete zsh"))
+    end)
+
+    it("defaults to bash when no shell is given", function()
+      local out = captured_stdout()
+      app:run({ "--__moonstone-complete-script" }, { stdout = out })
+      assert.truthy(out.text():find("bash completion for stellar"))
+    end)
+  end)
+
 end)

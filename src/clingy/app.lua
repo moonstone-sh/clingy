@@ -109,6 +109,32 @@ function App:run(argv, opts)
     return 0
   end
 
+  -- Hidden Silent Endpoint that prints the shell bridge itself (the same
+  -- text `app:completion_script(shell, cmd_path)` returns), rather than a
+  -- completion response. This is what makes standalone installation and
+  -- Moonstone's lazy, on-demand registration the SAME mechanism instead of
+  -- two: a human runs this once and sources/installs the output exactly
+  -- like any other CLI's `completions <shell>` command; `moon exec`'s own
+  -- completion delegation calls it lazily, the first time it needs a
+  -- completion for a command nothing has registered yet, evals the result,
+  -- and then defers to the shell's OWN normal dispatch (`complete -p`,
+  -- `_normal`, `complete -C`) exactly as if that registration had always
+  -- been there -- no protocol-specific parsing lives outside this app at
+  -- all. `cmd_path` defaults to this app's own declared name; a caller
+  -- that resolved the binary under a different invocation name should
+  -- pass that name explicitly so the registration matches what the shell
+  -- will actually look up.
+  if argv[1] == "--__moonstone-complete-script" then
+    local shell = argv[2] or "bash"
+    local cmd_path = argv[3]
+    local ok, script = pcall(self.completion_script, self, shell, cmd_path)
+    if ok and script and script ~= "" then
+      local out_stream = opts.stdout or io.stdout
+      out_stream:write(script)
+    end
+    return 0
+  end
+
   -- 1. Resolve Presentation Host (HOST-INV-01, HOST-INV-02, HOST-INV-03, Critique Amendment 5)
   local host = opts.presentation or opts.composer or self._config.presentation
   local is_default_composer = false
