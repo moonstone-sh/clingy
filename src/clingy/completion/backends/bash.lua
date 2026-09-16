@@ -35,7 +35,7 @@ function M.script(app_name, cmd_path)
 
     COMPREPLY=()
     local output
-    output=$(%s --__clingy-complete bash "${words[@]}" --cword="$cword" 2>/dev/null)
+    output=$(%s --__moonstone-complete bash "${words[@]}" --cword="$cword" 2>/dev/null)
     local exit_code=$?
     if [[ $exit_code -ne 0 ]]; then
         return $exit_code

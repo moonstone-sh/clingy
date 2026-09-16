@@ -68,8 +68,15 @@ function App:run(argv, opts)
   argv = argv or (type(arg) == "table" and arg or {})
   opts = opts or {}
 
-  -- Hidden Silent Endpoint for shell completion
-  if argv[1] == "--__clingy-complete" then
+  -- Hidden Silent Endpoint for shell completion. `--__moonstone-complete` is
+  -- the protocol's real name -- Clingy is its reference implementation, not
+  -- its owner, so a shell bridge (or any consumer, e.g. Moonstone's own
+  -- `moon exec` completion delegation) that probes for it isn't coupling
+  -- itself to Clingy specifically: any tool, in any language or framework,
+  -- that answers this exact wire format (see docs/COMPLETION_PROTOCOL.md)
+  -- gets the same fast path. `--__clingy-complete` is kept as an alias for
+  -- existing shell bridges already generated against it.
+  if argv[1] == "--__clingy-complete" or argv[1] == "--__moonstone-complete" then
     local shell = argv[2] or "bash"
     local cword = nil
     local words = {}

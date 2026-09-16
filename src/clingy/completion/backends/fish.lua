@@ -22,7 +22,7 @@ function %s
     set -l cmd (commandline -cop)
     set -l current (commandline -ct)
     set -l cword (math (count $cmd) + 1)
-    set -l raw (%s --__clingy-complete fish $cmd "$current" --cword=$cword 2>/dev/null)
+    set -l raw (%s --__moonstone-complete fish $cmd "$current" --cword=$cword 2>/dev/null)
     set -l filesystem -
     set -l replace_prefix -
     set -l extensions -

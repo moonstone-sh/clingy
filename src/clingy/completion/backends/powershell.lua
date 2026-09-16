@@ -41,7 +41,7 @@ Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock {
     }
     $cword = $words.Count
 
-    $raw = & %s --__clingy-complete powershell $words --cword=$cword 2>$null
+    $raw = & %s --__moonstone-complete powershell $words --cword=$cword 2>$null
     if ($null -eq $raw) { return }
 
     $filesystem = '-'

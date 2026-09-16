@@ -71,6 +71,14 @@ grep -qx $'V\t2' <<<"$raw_completion"
 grep -qx $'C\tcompletion' <<<"$raw_completion"
 grep -qx $'C\tgreet' <<<"$raw_completion"
 
+# This fixture depends on a PUBLISHED moonstone/clingy version (resolved
+# from the store, not this repo's live src/), so it only ever exercises
+# whatever's actually shipped. --__moonstone-complete (the alias added
+# alongside --__clingy-complete) is covered directly against live source
+# by tests/completion/backends_spec.lua and tests/runner.lua; it isn't
+# re-tested here until a Clingy release that includes it gets published
+# and this fixture's dependency is bumped to it.
+
 completion_file="$project/clingy-example.bash"
 "$cli" completion bash >"$completion_file"
 source "$completion_file"

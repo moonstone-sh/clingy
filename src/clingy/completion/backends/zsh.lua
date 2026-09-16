@@ -26,7 +26,7 @@ function M.script(app_name, cmd_path)
     local -a candidates
     local -a descriptions
 
-    raw_output=("${(@f)$(%s --__clingy-complete zsh "${words[@]}" --cword="$CURRENT" 2>/dev/null)}")
+    raw_output=("${(@f)$(%s --__moonstone-complete zsh "${words[@]}" --cword="$CURRENT" 2>/dev/null)}")
     if [[ $? -ne 0 ]]; then
         return
     fi
