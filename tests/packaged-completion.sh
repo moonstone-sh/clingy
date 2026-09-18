@@ -134,28 +134,10 @@ zsh_output="$(CLINGY_COMPLETION_FILE="$zsh_completion_file" zsh -fc '
   _clingy_636c696e67792d6578616d706c65
   words=(clingy-example chain --first-flag-completed argument:s)
   _clingy_636c696e67792d6578616d706c65
-  # Root-level completion returns several raw-output lines in one call (a V
-  # header plus one C record per subcommand), so the parsing loop below runs
-  # more than once per invocation -- the shape that regresses if the loops
-  # `local record value description fourth fifth` line is inside the loop:
-  # zsh treats a bare re-declaration of an already-local variable as a
-  # listing query and prints "name=value" straight to stdout instead of
-  # resetting it, leaking "record=...\nvalue=..." lines into the real
-  # candidate output.
-  words=(clingy-example "")
-  CURRENT=2
-  _clingy_636c696e67792d6578616d706c65
 ')"
 grep -qx 'argument:thisgotcompletedtoo' <<<"$zsh_output"
 grep -qx 'argument:other:value' <<<"$zsh_output"
 grep -qx 'argument:sad pepe' <<<"$zsh_output"
-grep -qx 'chain' <<<"$zsh_output"
-grep -qx 'greet' <<<"$zsh_output"
-if grep -qE '^(record|value|description|fourth|fifth)=' <<<"$zsh_output"; then
-  echo "Zsh completion leaked internal parsing-variable state into candidate output:" >&2
-  grep -E '^(record|value|description|fourth|fifth)=' <<<"$zsh_output" >&2
-  exit 1
-fi
 echo "Zsh packaged completion passed"
 
 if command -v fish >/dev/null 2>&1; then

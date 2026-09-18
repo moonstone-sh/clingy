@@ -37,5 +37,7 @@ jobs:
         run: moon run test
       - name: Test packaged shell completion
         run: CLINGY_REQUIRE_ALL_SHELLS=1 moon run test-packaged-completion
+      - name: Test live-source zsh completion
+        run: moon run test-live-source-completion
       - name: Export release candidate with Ballad
         run: moon exec -- ballad play partiture.lua

@@ -15,6 +15,7 @@ abi = "5.4"
 test = "lua tests/runner.lua"
 test-process-supervision = "python3 tests/process_supervision.py"
 test-packaged-completion = "bash tests/packaged-completion.sh"
+test-live-source-completion = "bash tests/live_source_zsh_completion.sh"
 dev = "lua ./src/main.lua \"$@\""
 package = "moon exec ballad -- play partiture.lua"
 
