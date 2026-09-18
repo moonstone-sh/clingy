@@ -38,4 +38,4 @@ jobs:
       - name: Test packaged shell completion
         run: CLINGY_REQUIRE_ALL_SHELLS=1 moon run test-packaged-completion
       - name: Export release candidate with Ballad
-        run: moon exec ballad play partiture.lua
+        run: moon exec -- ballad play partiture.lua

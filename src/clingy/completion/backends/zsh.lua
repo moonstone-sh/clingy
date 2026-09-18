@@ -38,8 +38,8 @@ function M.script(app_name, cmd_path)
     local replace_prefix="-"
     local extensions="-"
 
+    local record value description fourth fifth
     for line in "${raw_output[@]}"; do
-        local record value description fourth fifth
         IFS=$'\t' read -r record value description fourth fifth <<< "$line"
         if [[ "$record" == D ]]; then
             local dir="$value"
