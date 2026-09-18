@@ -14,14 +14,26 @@ set -euo pipefail
 # tests/fixtures/packaged-cli/main.lua directly against `src/` via LUA_PATH,
 # so it verifies the code actually under test.
 #
-# Regression covered: a real zsh completion function whose raw-output has 2+
-# lines in one call (root-level completion here: a V header plus one C
+# Regression covered (1): a real zsh completion function whose raw-output has
+# 2+ lines in one call (root-level completion here: a V header plus one C
 # record per subcommand) runs its per-record parsing loop more than once.
 # If that loop's `local record value description fourth fifth` line sits
 # INSIDE the loop, zsh treats the second-and-later bare re-declaration of an
 # already-local variable as a listing query and prints "name=value" straight
 # to stdout instead of resetting it -- leaking "record=...\nvalue=..." lines
 # into the real candidate output.
+#
+# Regression covered (2): main.lua's root-level subcommands (chain/greet/
+# completion) have no descriptions -- clingy's own completion protocol sends
+# an empty description field for candidates that don't have one. zsh's own
+# listing renderer draws COMPLETELY BLANK (no candidate text shown at all,
+# confirmed empirically against a real terminal) when `compadd -d array` is
+# given an array of all-empty-string descriptions, even though the
+# candidates are still valid matches (cyclable via repeated TAB, just never
+# visibly listed). The fix only passes `-d` when at least one candidate
+# actually has a description; this asserts that decision by checking the
+# array name itself never reaches compadd as a bogus extra candidate when it
+# shouldn't be passed.
 
 if ! command -v zsh >/dev/null 2>&1; then
   echo "⚠ zsh not available, skipping live_source_zsh_completion.sh" >&2
@@ -85,6 +97,10 @@ grep -qx 'completion' <<<"${zsh_output}"
 if grep -qE '^(record|value|description|fourth|fifth)=' <<<"${zsh_output}"; then
   echo "Zsh completion leaked internal parsing-variable state into candidate output:" >&2
   grep -E '^(record|value|description|fourth|fifth)=' <<<"${zsh_output}" >&2
+  exit 1
+fi
+if grep -qx 'descriptions' <<<"${zsh_output}"; then
+  echo "compadd was called with -d descriptions even though no candidate has a description -- this blanks the real zsh listing" >&2
   exit 1
 fi
 

@@ -34,6 +34,7 @@ function M.script(app_name, cmd_path)
     local has_files=0
     local has_dirs=0
     local has_nospace=0
+    local has_descriptions=0
     local filesystem="-"
     local replace_prefix="-"
     local extensions="-"
@@ -52,14 +53,21 @@ function M.script(app_name, cmd_path)
         elif [[ "$record" == C ]]; then
             candidates+=("$value")
             descriptions+=("$description")
+            [[ -n "$description" ]] && has_descriptions=1
         fi
     done
 
     if [[ ${#candidates[@]} -gt 0 ]]; then
+        # zsh's own listing renderer draws completely blank (no candidate
+        # text at all, not even without descriptions) when `-d` is given an
+        # array of all-empty-string descriptions -- confirmed empirically.
+        # Only pass `-d` when at least one candidate actually has one.
+        local -a describe_flag
+        (( has_descriptions )) && describe_flag=(-d descriptions)
         if [[ $has_nospace -eq 1 ]]; then
-            compadd -S '' -d descriptions -- "${candidates[@]}"
+            compadd -S '' "${describe_flag[@]}" -- "${candidates[@]}"
         else
-            compadd -d descriptions -- "${candidates[@]}"
+            compadd "${describe_flag[@]}" -- "${candidates[@]}"
         fi
     fi
 

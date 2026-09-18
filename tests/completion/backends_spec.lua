@@ -35,7 +35,12 @@ describe("Shell Completion Backends", function()
       local script = comp_mod.completion_script(app, "zsh")
       assert.truthy(script:find("#compdef stellar"), "defines #compdef header")
       assert.truthy(script:find("%-%-__moonstone%-complete zsh"), "invokes hidden entrypoint with zsh")
-      assert.truthy(script:find("compadd %-d descriptions"), "keeps values separate from descriptions")
+      -- `-d descriptions` is only actually passed to compadd when at least
+      -- one candidate has a real description (see zsh.lua's own comment:
+      -- zsh's listing renders completely blank when `-d` gets an array of
+      -- all-empty-string descriptions), but the script must still keep
+      -- values and descriptions in separate arrays so it CAN do that.
+      assert.truthy(script:find("describe_flag=%(%-d descriptions%)"), "keeps values separate from descriptions, passed conditionally")
       assert.truthy(script:find("compdef _clingy_7374656c6c6172 'stellar'"), "registers completion function")
     end)
 
