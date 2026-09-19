@@ -45,6 +45,11 @@ signals force KILL. Descendants still in the group are stopped even when their
 immediate parent has exited. The child receives `CLINGY_SUPERVISED=1` and the
 owner's PID in `CLINGY_SUPERVISOR_PID` for session-scoped coordination.
 
+Launchers that deliberately background the supervisor through a short-lived
+shell can export `CLINGY_OWNER_PID` with the long-lived caller's PID. The
+supervisor validates that value and monitors it instead of its immediate
+parent. This preserves parent-loss cleanup after the launcher shell exits.
+
 This backend requires Bash 3.2 or later on macOS or Linux. Descendants must keep
 the inherited process group; deliberate daemonization, `setsid`, and nested job
 control are outside its contract. The operating system reaps orphan descendants;

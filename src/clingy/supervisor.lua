@@ -44,9 +44,28 @@ parent_monitor_pid=
 requested_exit=
 cleaning=0
 have_lock=0
-owner_pid=$PPID
 terminal_fd_open=0
 child_event=0
+
+if [ -n "${CLINGY_OWNER_PID:-}" ]; then
+  case "$CLINGY_OWNER_PID" in
+    *[!0-9]*|'')
+      printf '%s\n' "$label: CLINGY_OWNER_PID must be a positive process id" >&2
+      exit 1
+      ;;
+  esac
+  if [ "$CLINGY_OWNER_PID" -le 1 ]; then
+    printf '%s\n' "$label: CLINGY_OWNER_PID must be greater than 1" >&2
+    exit 1
+  fi
+  owner_pid=$CLINGY_OWNER_PID
+else
+  owner_pid=$PPID
+fi
+# The override describes this supervisor's owner. Do not leak it into the
+# supervised child, where a nested supervisor would otherwise inherit the
+# wrong ownership boundary.
+unset CLINGY_OWNER_PID
 
 signal_group() {
   [ -n "$child_pid" ] && kill -"$1" -- "-$child_pid" 2>/dev/null || true

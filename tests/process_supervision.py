@@ -88,7 +88,8 @@ def worker(mode, root, args):
 
 
 class Session:
-    def __init__(self, case, mode="running", tty=False, args=(), parent=False, lock=None):
+    def __init__(self, case, mode="running", tty=False, args=(), parent=False,
+                 lock=None, owner_pid=None):
         self.case = case
         self.temp = tempfile.TemporaryDirectory(prefix="clingy process '")
         self.root = Path(self.temp.name)
@@ -101,9 +102,12 @@ class Session:
         fixture_env = os.environ.copy()
         if lock is not None:
             fixture_env["CLINGY_TEST_LOCK_DIR"] = str(lock)
+        supervisor_env = os.environ.copy()
+        if owner_pid is not None:
+            supervisor_env["CLINGY_OWNER_PID"] = str(owner_pid)
         generated = subprocess.run([
             os.environ.get("MOONSTONE_BIN", shutil.which("moon") or "moon"),
-            "exec", "--dev", "lua", "tests/process_supervision_fixture.lua",
+            "exec", "--dev", "--", "lua", "tests/process_supervision_fixture.lua",
             str(self.root), "tty" if tty else "redirected", sys.executable,
             str(THIS_FILE), "--worker", mode, str(self.root), *args,
         ], cwd=REPO, env=fixture_env, capture_output=True, text=True, timeout=30)
@@ -117,7 +121,7 @@ class Session:
                 if parent:
                     os.execv(sys.executable, [sys.executable, str(THIS_FILE),
                         "--worker", "parent", str(self.root)])
-                os.execv(BASH, [BASH, str(self.script)])
+                os.execve(BASH, [BASH, str(self.script)], supervisor_env)
             self.pid = pid
             self.pty_status = None
         else:
@@ -127,7 +131,7 @@ class Session:
                 argv = [sys.executable, str(THIS_FILE), "--worker", "parent", str(self.root)]
             self.proc = subprocess.Popen(
                 argv, stdin=subprocess.DEVNULL, stdout=self.log, stderr=self.log,
-                start_new_session=True,
+                start_new_session=True, env=supervisor_env,
             )
             self.pid = self.proc.pid
 
@@ -276,6 +280,21 @@ class ProcessSupervision(unittest.TestCase):
         session = Session(self, parent=True).ready()
         os.kill(session.pid, signal.SIGTERM)
         session.stopped(-signal.SIGTERM)
+
+    def test_explicit_owner_death_stops_detached_supervisor_and_owned_tree(self):
+        owner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        self.addCleanup(lambda: owner.poll() is None and owner.kill())
+        session = Session(self, owner_pid=owner.pid).ready()
+        owner.terminate()
+        owner.wait(timeout=5)
+        session.stopped(129)
+
+    def test_invalid_explicit_owner_is_rejected_before_spawn(self):
+        session = Session(self, owner_pid="not-a-pid")
+        self.assertTrue(eventually(lambda: session.poll() is not None), session.output())
+        self.assertEqual(session.poll(), 1, session.output())
+        self.assertIn("CLINGY_OWNER_PID must be a positive process id", session.output())
+        self.assertFalse((session.root / "worker.pid").exists())
 
     def test_terminal_parent_death_wakes_blocking_eof_reader(self):
         session = Session(self, parent=True, tty=True).ready()
