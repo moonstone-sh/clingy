@@ -1,4 +1,5 @@
 local util = require("clingy.util")
+local compat = require("clingy.compat")
 
 local M = {}
 
@@ -153,16 +154,7 @@ function ManagedProcess:wait()
     local handle = io.popen(self._cmd_line .. " 2>&1")
     if handle then
       output = handle:read("*a") or ""
-      local ok, exit_type, code = handle:close()
-      if ok == true then
-        exit_code = 0
-      elseif type(exit_type) == "number" then
-        exit_code = exit_type
-      elseif type(code) == "number" then
-        exit_code = code
-      else
-        exit_code = 1
-      end
+      exit_code = compat.exit_status(handle:close())
     end
     self.stdout_buffer = output
 
@@ -194,9 +186,7 @@ function ManagedProcess:wait()
       end
     end
 
-    local ok, exit_type, code = pcall(function()
-      return os.execute(self._cmd_line)
-    end)
+    local ran, ok, how, code = pcall(os.execute, self._cmd_line)
 
     if self.mode == "interactive" and host and host.resume then
       local ok_resume, resume_err = pcall(function()
@@ -211,20 +201,7 @@ function ManagedProcess:wait()
       end
     end
 
-    if ok then
-      local exec_ok, t_or_c, maybe_code = exit_type, code, nil
-      if exec_ok == true then
-        exit_code = 0
-      elseif type(exec_ok) == "number" then
-        exit_code = exec_ok
-      elseif type(t_or_c) == "number" then
-        exit_code = t_or_c
-      else
-        exit_code = 1
-      end
-    else
-      exit_code = 1
-    end
+    exit_code = ran and compat.exit_status(ok, how, code) or 1
   end
 
   self.exit_code = exit_code

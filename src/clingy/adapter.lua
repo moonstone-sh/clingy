@@ -1,4 +1,5 @@
 local util = require("clingy.util")
+local compat = require("clingy.compat")
 
 local M = {}
 
@@ -77,7 +78,7 @@ local function inspect_valua(schema)
         options = { current.value }
         local vt = type(current.value)
         if vt == "number" then
-          kind = (math.tointeger and math.tointeger(current.value)) and "integer" or "number"
+          kind = compat.to_integer(current.value) and "integer" or "number"
         elseif vt == "boolean" then
           kind = "boolean"
         elseif vt == "string" then
@@ -94,7 +95,7 @@ local function inspect_valua(schema)
           if type(opt) ~= "number" then
             all_num = false
             all_int = false
-          elseif math.tointeger and not math.tointeger(opt) then
+          elseif not compat.to_integer(opt) then
             all_int = false
           end
           if type(opt) ~= "boolean" then
@@ -151,10 +152,7 @@ local function coerce_valua(schema, token)
   if kind == "integer" then
     if token:match("^[+-]?%d+$") then
       local n = tonumber(token)
-      if n and math.tointeger then
-        return math.tointeger(n) or n
-      end
-      return n
+      return n and compat.to_integer(n) or n
     end
     return token
   elseif kind == "number" then

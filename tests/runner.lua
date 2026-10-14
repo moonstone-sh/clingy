@@ -6,6 +6,7 @@ local h = require("tests.harness")
 -- This runner is the executable contract for table declarations, forms, and
 -- completion behavior.
 local suites = {
+  "tests.compat_spec",
   "tests.new_api_spec",
   "tests.router_semantics_spec",
   "tests.cli.init_spec",
