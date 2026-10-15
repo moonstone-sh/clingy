@@ -147,7 +147,7 @@ end
 
 ---Coerces a string token according to Valua schema.
 local function coerce_valua(schema, token)
-  local info = inspect_valua(schema)
+  local info = M.inspect_schema(schema)
   local kind = info and info.kind
   if kind == "integer" then
     if token:match("^[+-]?%d+$") then
@@ -190,15 +190,31 @@ M.register(valua_adapter)
 ---Returns empty table {} if no adapter matches (zero duck-typing).
 ---@param schema any
 ---@return table Info { kind?: string, description?: string, default?: any, options?: string[] }
+-- Inspection results per schema. Schemas are immutable, so reflecting once
+-- is enough; built CLIs (clingy.runtime) fill this from build-time data and
+-- never reflect at all. Weak keys keep the cache from holding schemas alive.
+local inspected = setmetatable({}, { __mode = "k" })
+
+---Records a schema's inspection result, computed ahead of time.
+---@param schema table
+---@param info table { kind?: string, description?: string, default?: any, options?: any[] }
+function M.preload_inspection(schema, info)
+  inspected[schema] = info
+end
+
 function M.inspect_schema(schema)
   if not schema or type(schema) ~= "table" then
     return {}
   end
+  local cached = inspected[schema]
+  if cached then return cached end
+  local info = {}
   local adapter = M.find_adapter(schema)
   if adapter and adapter.inspect then
-    return adapter.inspect(schema) or {}
+    info = adapter.inspect(schema) or {}
   end
-  return {}
+  inspected[schema] = info
+  return info
 end
 
 ---Performs lexical adaptation from a raw string token to the primitive expected by the schema.

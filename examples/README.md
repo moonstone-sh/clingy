@@ -132,6 +132,20 @@ cd examples/json-stream-events
 moon exec lua src/main.lua --json compile desktop -o dist
 ```
 
+### 9. [`build-time/`](build-time/) — Built CLI
+The greet CLI compiled ahead of time with `clingy.build` and run with
+`clingy.runtime`, next to the same CLI through `c.create`, plus a one-file
+Quaver bundle and a startup benchmark. See [Build time and run time](../docs/BUILD_TIME.md).
+
+```bash
+cd examples/build-time
+export VALUA_SRC=<valua checkout>/src
+export LUA_PATH="./?.lua;../../src/?.lua;../../src/?/init.lua;$VALUA_SRC/?.lua;$VALUA_SRC/?/init.lua;;"
+lua build.lua && lua run_built.lua -s -n 2 Ada
+# [INFO] Hello, ADA!
+# [INFO] Hello, ADA!
+```
+
 ---
 
 ## Shell Completions

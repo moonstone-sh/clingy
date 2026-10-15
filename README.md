@@ -219,6 +219,23 @@ commands. Child names and aliases are reserved after that prefix. A literal
 `--` ends option parsing and routing, so a reserved command spelling can be
 passed as positional data. Use `c.tail` to capture or forward remaining words.
 
+## Building ahead of time
+
+`c.create` compiles the declaration on every run. For a release, compile it
+once and ship the result:
+
+```lua
+-- build step
+require("clingy.build").write({ declaration = "greet.cli", module = "greet.built" })
+-- the CLI's entry
+os.exit(require("clingy.runtime").run(require("greet.built"), arg))
+```
+
+A built CLI loads about a third of the modules, and Clingy's share of startup
+drops by about two thirds. Handlers must be exported from a module; inline Valua schemas of
+common shapes are recreated. See [Build time and run time](docs/BUILD_TIME.md)
+and the [built format](docs/BUILT_FORMAT.md).
+
 ## Documentation
 
 - [Example projects](examples/README.md)
@@ -226,6 +243,7 @@ passed as positional data. Use `c.tail` to capture or forward remaining words.
 - [Parsing semantics](docs/PARSING_SEMANTICS.md)
 - [Runtime lifecycle](docs/RUNTIME_LIFECYCLE.md)
 - [Output and events](docs/OUTPUT_AND_EVENTS.md)
+- [Build time and run time](docs/BUILD_TIME.md), [built format](docs/BUILT_FORMAT.md)
 
 ## License
 
