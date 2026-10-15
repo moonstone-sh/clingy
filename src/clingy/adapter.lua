@@ -32,11 +32,11 @@ function M.find_adapter(schema)
   return nil
 end
 
----Safely requires Valua if available.
+---Loads Valua on first use. It is a declared runtime dependency, and only
+---Valua schemas reach this adapter. The literal require keeps the edge
+---visible to static bundlers (Quaver strict mode).
 local function get_valua()
-  local ok, valua = pcall(require, "valua")
-  if ok then return valua end
-  return nil
+  return require("valua")
 end
 
 ---Inspects a Valua schema using Valua reflection.
