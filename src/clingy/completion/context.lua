@@ -19,7 +19,8 @@ function M.create(opts)
 
   local cwd = opts.cwd
   if not cwd then
-    local ok_lfs, lfs = pcall(require, "lfs")
+    -- Optional: a literal require inside a closure stays statically visible.
+    local ok_lfs, lfs = pcall(function() return require("lfs") end)
     if ok_lfs and lfs and lfs.currentdir then
       cwd = lfs.currentdir()
     else
