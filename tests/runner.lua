@@ -8,6 +8,7 @@ local h = require("tests.harness")
 local suites = {
   "tests.compat_spec",
   "tests.static_requires_spec",
+  "tests.build_spec",
   "tests.new_api_spec",
   "tests.router_semantics_spec",
   "tests.cli.init_spec",
