@@ -52,11 +52,20 @@ if mode == 'tree':
  time.sleep(float(sys.argv[3]))
 ''', encoding='utf-8')
     processes, descendants = [], []
+    def lua_string(value):
+        return '"' + ''.join('\\%03d' % byte for byte in value.encode('utf-8')) + '"'
     def launch(name, mode, args, **extra):
-        script = work / (name + '.ps1')
-        env = dict(os.environ, CLINGY_TEST_CWD=str(work), CLINGY_TEST_ROOT=str(root), **extra)
-        subprocess.run([moon,'-C',fixture,'exec','--','lua',str(root/'tests/windows/supervisor.lua'),str(script),mode,
-                        sys.executable,str(child),*args],env=env,check=True,timeout=60)
+        scripts = root / '.ci' / 'windows-contract'
+        scripts.mkdir(parents=True, exist_ok=True)
+        script = scripts / (name + '.ps1')
+        config = scripts / (name + '.lua')
+        config.write_text('return {argv={' + ','.join(map(lua_string,[sys.executable,str(child),*args])) +
+            '},cwd=' + lua_string(str(work)) +
+            ',env={CLINGY_TEST_VALUE=' + lua_string("literal & % ! ' ü") + '},grace_ms=200,stdin_eof=' +
+            ('true' if mode=='eof' else 'false') + ',lock_dir=' + lua_string(extra.get('CLINGY_TEST_LOCK','')) +
+            ',cleanup_files={' + lua_string(extra.get('CLINGY_TEST_CLEANUP',str(work/'missing'))) + '}}',encoding='ascii')
+        subprocess.run([moon,'-C',fixture,'exec','--','lua',str(root/'tests/windows/supervisor.lua'),
+                        str(script),str(config)],check=True,timeout=60)
         process = subprocess.Popen(['powershell.exe','-NoLogo','-NoProfile','-ExecutionPolicy','Bypass',
                          '-File',str(script)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE,creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
