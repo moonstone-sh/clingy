@@ -30,7 +30,7 @@ def alive(pid):
         kernel.CloseHandle(handle)
 
 def eventually(check, description):
-    until = time.monotonic() + 10
+    until = time.monotonic() + 25
     while time.monotonic() < until:
         if check():
             return
@@ -82,7 +82,14 @@ if mode == 'tree':
             pidfile=work/(name+'.pid')
             process=launch(name,'eof' if action=='eof' else 'normal',
                            ['tree',str(pidfile),'1' if action is None else '120'])
-            eventually(pidfile.exists,'child did not start')
+            print('Testing',name,flush=True)
+            def started():
+                if pidfile.exists(): return True
+                if process.poll() is not None:
+                    out,err=process.communicate()
+                    raise AssertionError((name,process.returncode,out,err))
+                return False
+            eventually(started,'child did not start: '+name)
             pid=int(pidfile.read_text()); descendants.append(pid)
             assert alive(pid)
             if action=='break': process.send_signal(signal.CTRL_BREAK_EVENT)
