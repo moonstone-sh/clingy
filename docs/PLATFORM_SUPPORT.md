@@ -6,7 +6,7 @@
 |---|---|---|---|---|---|
 | **macOS (Darwin)** | Full Support | Full Support (VT100 / UTF-8) | Full Support (POSIX) | Full Support | Full Support |
 | **Linux** | Full Support | Full Support (VT100 / UTF-8) | Full Support (POSIX) | Full Support | Full Support |
-| **Windows** | Full Support | Full Support (Windows Terminal / conhost) | Supported (`SIGINT` Ctrl+C) | Supported (`os.execute` / `io.popen`) | Supported (In-Memory Queue) |
+| **Windows** | Native lifecycle certification in progress | Plain output available; fancy hosts need separate certification | Job supervisor handles console cancellation | PowerShell Job Object backend; native CI required | In-memory queue, not cross-process transport |
 
 ---
 
@@ -20,8 +20,14 @@
 
 ### Lua flavors
 
-Clingy ships one source tree for every runtime above and no Moonstone flavor
-variants (`mod@lua54.lua` files). The version differences it depends on live in
+Clingy uses Moonstone OS flavor variants for `clingy.platform` and
+`clingy.supervisor`. Windows supervision emits a PowerShell script owning a
+kill-on-close Job Object. The child starts suspended and joins the job before
+its first instruction. Competing sessions use an exclusive named mutex.
+`supervisor_extension()` and `supervisor_command(path)` let callers launch the
+selected script without assuming Bash or a `.sh` suffix.
+
+The Lua-version differences it depends on live in
 `src/clingy/compat.lua`:
 
 - `compat.to_integer`: `math.tointeger` on 5.3+, an equivalent integral-value

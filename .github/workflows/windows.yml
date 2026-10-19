@@ -1,0 +1,34 @@
+name: Windows lifecycle
+on:
+  pull_request:
+  push:
+    branches: [main, feat/windows-flavors]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lifecycle:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: moonstone-sh/moonstone
+          ref: b2f6d33
+          path: .ci/moonstone
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Build Moonstone
+        working-directory: .ci/moonstone
+        run: zig build
+      - name: Synchronize actual package dependencies
+        shell: pwsh
+        run: |
+          & .ci/moonstone/zig-out/bin/moon.exe sync
+          if ($LASTEXITCODE -ne 0) { throw 'moon sync failed' }
+      - name: Exercise native Windows supervision
+        shell: pwsh
+        run: |
+          python tests/windows/lifecycle.py .ci/moonstone/zig-out/bin/moon.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Windows lifecycle failed' }
