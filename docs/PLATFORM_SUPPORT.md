@@ -6,7 +6,7 @@
 |---|---|---|---|---|---|
 | **macOS (Darwin)** | Full Support | Full Support (VT100 / UTF-8) | Full Support (POSIX) | Full Support | Full Support |
 | **Linux** | Full Support | Full Support (VT100 / UTF-8) | Full Support (POSIX) | Full Support | Full Support |
-| **Windows** | Native lifecycle certification in progress | Plain output available; fancy hosts need separate certification | Job supervisor handles console cancellation | PowerShell Job Object backend; native CI required | In-memory queue, not cross-process transport |
+| **Windows** | Native x64 parser/help checks pass | Plain output available; fancy hosts need separate certification | Job supervisor handles console cancellation | PowerShell Job Object backend; native x64 CI passes | In-memory queue, not cross-process transport |
 
 ---
 
@@ -26,6 +26,12 @@ kill-on-close Job Object. The child starts suspended and joins the job before
 its first instruction. Competing sessions use an exclusive named mutex.
 `supervisor_extension()` and `supervisor_command(path)` let callers launch the
 selected script without assuming Bash or a `.sh` suffix.
+
+Native Windows tests cover exit codes, literal UTF-8 Lua strings, descendant
+cleanup, console cancellation, redirected stdin EOF, supervisor/owner death,
+and exclusive session ownership. This does not certify every terminal host,
+Windows ARM64, or the Lua distribution's CRT encoding for OS argv, environment
+and filesystem paths.
 
 The Lua-version differences it depends on live in
 `src/clingy/compat.lua`:
