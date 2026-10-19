@@ -65,7 +65,7 @@ if mode == 'tree':
             ('true' if mode=='eof' else 'false') + ',lock_dir=' + lua_string(extra.get('CLINGY_TEST_LOCK','')) +
             ',cleanup_files={' + lua_string(extra.get('CLINGY_TEST_CLEANUP',str(work/'missing'))) + '}}',encoding='ascii')
         subprocess.run([moon,'-C',fixture,'exec','--','lua',str(root/'tests/windows/supervisor.lua'),
-                        str(script),str(config)],check=True,timeout=60)
+                        str(script),str(config)],env=dict(os.environ,CLINGY_TEST_ROOT=str(root)),check=True,timeout=60)
         process = subprocess.Popen(['powershell.exe','-NoLogo','-NoProfile','-ExecutionPolicy','Bypass',
                          '-File',str(script)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE,creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
