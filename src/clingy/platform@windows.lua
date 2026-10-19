@@ -22,4 +22,9 @@ function M.command(opts)
   parts[#parts + 1] = table.concat(argv, " ")
   return 'cmd /d /v:off /s /c "' .. table.concat(parts, " && ") .. '"'
 end
+function M.mkdir(path)
+  if path == "" or path == "." then return end
+  local command = M.windows and ("if not exist " .. M.quote(path) .. " mkdir " .. M.quote(path)) or ("mkdir -p " .. M.quote(path))
+  assert(require("clingy.compat").exit_status(os.execute(command)) == 0, "cannot create directory " .. path)
+end
 return M
