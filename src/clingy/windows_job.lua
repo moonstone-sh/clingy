@@ -7,7 +7,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Threading.Tasks;
+
 public static class ClingyJob {
   [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
   struct Startup { public int cb; public string reserved, desktop, title;
@@ -36,6 +36,9 @@ public static class ClingyJob {
   [DllImport("kernel32.dll")] static extern bool TerminateJobObject(IntPtr job,uint code);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
   [DllImport("kernel32.dll")] static extern IntPtr GetStdHandle(int id);
+  [DllImport("kernel32.dll")] static extern uint GetFileType(IntPtr handle);
+  [DllImport("kernel32.dll",SetLastError=true)] static extern bool PeekNamedPipe(IntPtr handle,IntPtr buffer,uint size,IntPtr read,out uint available,IntPtr left);
+  [DllImport("kernel32.dll",SetLastError=true)] static extern bool ReadFile(IntPtr handle,byte[] buffer,uint size,out uint read,IntPtr overlapped);
   [DllImport("kernel32.dll")] static extern bool SetConsoleCtrlHandler(Handler handler,bool add);
   [DllImport("kernel32.dll")] static extern bool GenerateConsoleCtrlEvent(uint kind,uint group);
   static void Check(bool ok) { if(!ok) throw new Win32Exception(Marshal.GetLastWin32Error()); }
@@ -78,11 +81,18 @@ public static class ClingyJob {
       if(!AssignProcessToJobObject(job,info.process)) { int error=Marshal.GetLastWin32Error(); TerminateProcess(info.process,1); throw new Win32Exception(error); }
       Check(ResumeThread(info.thread)!=0xffffffff);
       Check(SetConsoleCtrlHandler(handler,true));
-      Task<int> input=stdinEof ? Task.Run(delegate { return Console.In.Read(); }) : null;
+      bool watchPipe=stdinEof && GetFileType(startup.input)==3;
       while(WaitForSingleObject(info.process,50)==258) {
-        if(input!=null && input.IsCompleted) {
-          if(input.IsFaulted || input.Result<0) Interlocked.Exchange(ref stopped,1);
-          else input=Task.Run(delegate { return Console.In.Read(); });
+        if(watchPipe) {
+          uint available;
+          if(!PeekNamedPipe(startup.input,IntPtr.Zero,0,IntPtr.Zero,out available,IntPtr.Zero)) {
+            int error=Marshal.GetLastWin32Error();
+            if(error==109 || error==232) Interlocked.Exchange(ref stopped,1);
+            else throw new Win32Exception(error);
+          } else if(available>0) {
+            byte[] buffer=new byte[Math.Min(available,256)]; uint read;
+            if(!ReadFile(startup.input,buffer,(uint)buffer.Length,out read,IntPtr.Zero)) Interlocked.Exchange(ref stopped,1);
+          }
         }
         if(Interlocked.CompareExchange(ref stopped,0,0)!=0) {
           GenerateConsoleCtrlEvent(1,info.pid); // CTRL_BREAK to the owned group
