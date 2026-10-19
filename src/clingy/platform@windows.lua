@@ -18,7 +18,10 @@ function M.command(opts)
   table.sort(keys)
   for _, key in ipairs(keys) do parts[#parts + 1] = "set " .. M.quote(key .. "=" .. opts.env[key]) end
   local argv = {}
-  for _, value in ipairs(opts.argv) do argv[#argv + 1] = M.quote(value) end
+  for _, value in ipairs(opts.argv) do
+    local quoted = M.quote(value) -- validate even tokens that need no quotes
+    argv[#argv + 1] = value:match("^[%w_./:=+-]+$") and value or quoted
+  end
   parts[#parts + 1] = table.concat(argv, " ")
   return 'cmd /d /v:off /s /c "' .. table.concat(parts, " && ") .. '"'
 end
