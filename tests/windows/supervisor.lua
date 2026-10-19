@@ -1,4 +1,5 @@
-package.path = "src/?.lua;src/?/init.lua;" .. package.path
+local root = assert(os.getenv("CLINGY_TEST_ROOT"))
+package.path = root .. "/src/?.lua;" .. root .. "/src/?/init.lua;" .. package.path
 require("moonstone.variants").install()
 local supervisor = require("clingy.supervisor")
 assert(supervisor.extension == ".ps1", "Windows flavor was not selected")

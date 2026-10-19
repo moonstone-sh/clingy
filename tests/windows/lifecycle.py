@@ -12,6 +12,7 @@ import time
 assert sys.platform == 'win32'
 moon = str(Path(sys.argv[1]).resolve())
 root = Path(__file__).resolve().parents[2]
+fixture = str(Path(sys.argv[2]).resolve()) if len(sys.argv)>2 else str(root)
 os.chdir(root)
 kernel = ctypes.WinDLL('kernel32', use_last_error=True)
 kernel.OpenProcess.restype = ctypes.c_void_p
@@ -53,8 +54,8 @@ if mode == 'tree':
     processes, descendants = [], []
     def launch(name, mode, args, **extra):
         script = work / (name + '.ps1')
-        env = dict(os.environ, CLINGY_TEST_CWD=str(work), **extra)
-        subprocess.run([moon,'exec','--','lua','tests/windows/supervisor.lua',str(script),mode,
+        env = dict(os.environ, CLINGY_TEST_CWD=str(work), CLINGY_TEST_ROOT=str(root), **extra)
+        subprocess.run([moon,'-C',fixture,'exec','--','lua',str(root/'tests/windows/supervisor.lua'),str(script),mode,
                         sys.executable,str(child),*args],env=env,check=True,timeout=60)
         process = subprocess.Popen(['powershell.exe','-NoLogo','-NoProfile','-ExecutionPolicy','Bypass',
                          '-File',str(script)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,

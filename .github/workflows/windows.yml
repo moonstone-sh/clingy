@@ -22,13 +22,16 @@ jobs:
       - name: Build Moonstone
         working-directory: .ci/moonstone
         run: zig build
-      - name: Synchronize actual package dependencies
+      - name: Prepare a native Lua environment for the isolated supervisor contract
         shell: pwsh
         run: |
-          & .ci/moonstone/zig-out/bin/moon.exe sync
-          if ($LASTEXITCODE -ne 0) { throw 'moon sync failed' }
+          $moon = "$env:GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin/moon.exe"
+          & $moon init "$env:RUNNER_TEMP/clingy-contract" --name clingy-contract --kind script --interpreter lua@5.4 --no-sync
+          if ($LASTEXITCODE -ne 0) { throw 'fixture init failed' }
+          & $moon -C "$env:RUNNER_TEMP/clingy-contract" sync
+          if ($LASTEXITCODE -ne 0) { throw 'native Lua sync failed' }
       - name: Exercise native Windows supervision
         shell: pwsh
         run: |
-          python tests/windows/lifecycle.py .ci/moonstone/zig-out/bin/moon.exe
+          python tests/windows/lifecycle.py .ci/moonstone/zig-out/bin/moon.exe "$env:RUNNER_TEMP/clingy-contract"
           if ($LASTEXITCODE -ne 0) { throw 'Windows lifecycle failed' }
