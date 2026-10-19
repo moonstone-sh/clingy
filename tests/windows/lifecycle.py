@@ -61,7 +61,7 @@ if mode == 'tree':
         config = scripts / (name + '.lua')
         config.write_text('return {argv={' + ','.join(map(lua_string,[sys.executable,str(child),*args])) +
             '},cwd=' + lua_string(str(work)) +
-            ',env={CLINGY_TEST_VALUE=' + lua_string("literal & % ! ' ü") + '},grace_ms=200,stdin_eof=' +
+            ',env={CLINGY_TEST_VALUE=' + lua_string("literal & % ! ' ü") + ',CLINGY_OWNER_PID=' + lua_string(extra.get('CLINGY_TEST_OWNER','')) + '},grace_ms=200,stdin_eof=' +
             ('true' if mode=='eof' else 'false') + ',lock_dir=' + lua_string(extra.get('CLINGY_TEST_LOCK','')) +
             ',cleanup_files={' + lua_string(extra.get('CLINGY_TEST_CLEANUP',str(work/'missing'))) + '}}',encoding='ascii')
         subprocess.run([moon,'-C',fixture,'exec','--','lua',str(root/'tests/windows/supervisor.lua'),
@@ -101,6 +101,16 @@ if mode == 'tree':
             elif action is None:
                 assert process.returncode==0,stderr
             eventually(lambda:not alive(pid),'owned grandchild survived '+name)
+        owner_process=subprocess.Popen([sys.executable,'-c','import time; time.sleep(120)'])
+        processes.append(owner_process)
+        owner_pidfile=work/'parent-loss.pid'
+        supervised=launch('parent-loss','normal',['tree',str(owner_pidfile),'120'],CLINGY_TEST_OWNER=str(owner_process.pid))
+        eventually(owner_pidfile.exists,'owned child did not start')
+        descendant=int(owner_pidfile.read_text()); descendants.append(descendant)
+        owner_process.kill(); owner_process.wait(timeout=10)
+        supervised.communicate(timeout=15)
+        assert supervised.returncode==130
+        eventually(lambda:not alive(descendant),'grandchild survived owner death')
         # Contention must never remove the running owner's cleanup files.
         marker=work/'owner.pid'; marker.write_text('owned')
         lock=str(work/'session.lock')

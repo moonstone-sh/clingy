@@ -41,6 +41,29 @@ public static class ClingyJob {
   [DllImport("kernel32.dll",SetLastError=true)] static extern bool ReadFile(IntPtr handle,byte[] buffer,uint size,out uint read,IntPtr overlapped);
   [DllImport("kernel32.dll")] static extern bool SetConsoleCtrlHandler(Handler handler,bool add);
   [DllImport("kernel32.dll")] static extern bool GenerateConsoleCtrlEvent(uint kind,uint group);
+  [StructLayout(LayoutKind.Sequential)] struct ProcessBasic { public IntPtr reserved,peb,r2,r3,id,parent; }
+  [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr process,int kind,ref ProcessBasic info,int size,out int returned);
+  static System.Diagnostics.Process Owner(IDictionary env) {
+    string explicitOwner=env.Contains("CLINGY_OWNER_PID") ? (string)env["CLINGY_OWNER_PID"] : Environment.GetEnvironmentVariable("CLINGY_OWNER_PID");
+    if(String.IsNullOrEmpty(explicitOwner)) explicitOwner=Environment.GetEnvironmentVariable("CLINGY_SUPERVISOR_PID");
+    if(!String.IsNullOrEmpty(explicitOwner)) {
+      int id; if(!Int32.TryParse(explicitOwner,out id) || id<=1) throw new ArgumentException("CLINGY_OWNER_PID must name a live process");
+      var selected=System.Diagnostics.Process.GetProcessById(id);
+      if(selected.HasExited) { selected.Dispose(); throw new ArgumentException("CLINGY_OWNER_PID is not alive"); }
+      return selected;
+    }
+    var process=System.Diagnostics.Process.GetCurrentProcess();
+    for(int depth=0;depth<8;depth++) {
+      var info=new ProcessBasic(); int returned;
+      int status=NtQueryInformationProcess(process.Handle,0,ref info,Marshal.SizeOf(typeof(ProcessBasic)),out returned);
+      process.Dispose();
+      if(status!=0) throw new InvalidOperationException("Cannot identify the Clingy process owner");
+      process=System.Diagnostics.Process.GetProcessById(info.parent.ToInt32());
+      string name=process.ProcessName;
+      if(!name.Equals("cmd",StringComparison.OrdinalIgnoreCase) && !name.Equals("powershell",StringComparison.OrdinalIgnoreCase) && !name.Equals("pwsh",StringComparison.OrdinalIgnoreCase)) return process;
+    }
+    process.Dispose(); throw new InvalidOperationException("Cannot identify the Clingy process owner; set CLINGY_OWNER_PID");
+  }
   static void Check(bool ok) { if(!ok) throw new Win32Exception(Marshal.GetLastWin32Error()); }
   // CRT argv encoding, independent of cmd.exe/PowerShell expansion.
   static string Quote(string value) {
@@ -54,9 +77,10 @@ public static class ClingyJob {
   }
   public static int Run(string[] argv,string cwd,IDictionary env,int grace,bool stdinEof,string lockPath,string[] cleanupFiles) {
     IntPtr job=IntPtr.Zero, block=IntPtr.Zero; Info info=new Info();
-    Mutex mutex=null; bool owns=false; int stopped=0;
+    Mutex mutex=null; bool owns=false; int stopped=0; System.Diagnostics.Process owner=null;
     Handler handler=delegate(uint signal) { Interlocked.Exchange(ref stopped,1); return true; };
     try {
+      owner=Owner(env);
       if(!String.IsNullOrEmpty(lockPath)) {
         string full=System.IO.Path.GetFullPath(lockPath).ToUpperInvariant();
         byte[] hash=System.Security.Cryptography.SHA256.Create().ComputeHash(Encoding.UTF8.GetBytes(full));
@@ -83,6 +107,7 @@ public static class ClingyJob {
       Check(SetConsoleCtrlHandler(handler,true));
       bool watchPipe=stdinEof && GetFileType(startup.input)==3;
       while(WaitForSingleObject(info.process,50)==258) {
+        if(owner.HasExited) Interlocked.Exchange(ref stopped,1);
         if(watchPipe) {
           uint available;
           if(!PeekNamedPipe(startup.input,IntPtr.Zero,0,IntPtr.Zero,out available,IntPtr.Zero)) {
@@ -111,6 +136,7 @@ public static class ClingyJob {
         foreach(string path in cleanupFiles) { try { System.IO.File.Delete(path); } catch(System.IO.IOException) {} }
       }
       if(owns) mutex.ReleaseMutex(); if(mutex!=null) mutex.Dispose();
+      if(owner!=null) owner.Dispose();
       GC.KeepAlive(handler);
     }
   }
