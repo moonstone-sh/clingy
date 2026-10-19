@@ -94,6 +94,7 @@ public static class ClingyJob {
       var environment=new SortedDictionary<string,string>(StringComparer.OrdinalIgnoreCase);
       foreach(DictionaryEntry pair in Environment.GetEnvironmentVariables()) environment[(string)pair.Key]=(string)pair.Value;
       foreach(DictionaryEntry pair in env) environment[(string)pair.Key]=(string)pair.Value;
+      environment["CLINGY_SUPERVISED"]="1";
       environment["CLINGY_SUPERVISOR_PID"]=System.Diagnostics.Process.GetCurrentProcess().Id.ToString();
       var data=new StringBuilder(); foreach(var pair in environment) data.Append(pair.Key).Append('=').Append(pair.Value).Append('\0');
       data.Append('\0'); block=Marshal.StringToHGlobalUni(data.ToString());
