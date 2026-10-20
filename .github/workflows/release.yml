@@ -26,11 +26,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: moonstone-sh/moonstone
-          ref: main
+          ref: 8944a13712d6314d2529d0adaf0b8850aa2bcfda
           path: .ci/moonstone
       - uses: actions/checkout@v4
         with:
           repository: moonstone-sh/ballad
+          ref: 27571e41630a3d5c61025e60bae303e1159df620
           path: .ci/ballad
           fetch-depth: 0
       - uses: mlugg/setup-zig@v2
