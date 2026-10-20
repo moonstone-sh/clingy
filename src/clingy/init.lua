@@ -1,3 +1,6 @@
+local variants_ok, variants = pcall(function() return require("moonstone.variants") end)
+if variants_ok then variants.install() end
+
 local dsl = require("clingy.dsl")
 local compiler = require("clingy.compiler")
 local app_mod = require("clingy.app")

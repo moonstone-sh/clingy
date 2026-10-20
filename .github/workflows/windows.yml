@@ -1,0 +1,50 @@
+name: Windows lifecycle
+on:
+  pull_request:
+  push:
+    branches: [main, feat/windows-flavors]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lifecycle:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: moonstone-sh/moonstone
+          ref: 9a8efe9f609dc305d734031c9c3dc9374f01a6eb
+          path: .ci/moonstone
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - uses: actions/cache@v4
+        with:
+          path: .zig-cache
+          key: moonstone-windows-b2f6d33-zig016
+      - name: Build Moonstone
+        working-directory: .ci/moonstone
+        run: zig build
+      - name: Prepare a native Lua environment for the isolated supervisor contract
+        shell: pwsh
+        run: |
+          $moon = "$env:GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin/moon.exe"
+          & $moon init "$env:RUNNER_TEMP/clingy-contract" --name clingy-contract --kind script --interpreter lua@5.4 --no-sync
+          if ($LASTEXITCODE -ne 0) { throw 'fixture init failed' }
+          & $moon -C "$env:RUNNER_TEMP/clingy-contract" sync
+          if ($LASTEXITCODE -ne 0) { throw 'native Lua sync failed' }
+      - name: Add pure Lua authoring dependencies and exercise core declarations
+        shell: pwsh
+        run: |
+          $moon="$env:GITHUB_WORKSPACE/.ci/moonstone/zig-out/bin/moon.exe"
+          & $moon -C "$env:RUNNER_TEMP/clingy-contract" add moonstone/valua moonstone/alter moonstone/alter-jsonc moonstone/luals-composer
+          if ($LASTEXITCODE -ne 0) { throw 'native dependencies failed' }
+          $env:CLINGY_TEST_ROOT=$env:GITHUB_WORKSPACE
+          & $moon -C "$env:RUNNER_TEMP/clingy-contract" exec -- lua "$env:GITHUB_WORKSPACE/tests/windows/parser.lua"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows declarations failed' }
+      - name: Exercise native Windows supervision
+        shell: pwsh
+        run: |
+          python tests/windows/lifecycle.py .ci/moonstone/zig-out/bin/moon.exe "$env:RUNNER_TEMP/clingy-contract"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows lifecycle failed' }

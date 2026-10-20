@@ -1,6 +1,6 @@
 -- Generate an exec-able OS supervisor without requiring Lua signal bindings.
 -- This is a foreground, non-interactive child process-group owner for Bash 3.2+.
-local M = {}
+local M = { extension = ".sh" }
 
 local function quote(value)
   value = tostring(value)
@@ -244,6 +244,10 @@ trap - EXIT
 printf '%s\n' "$label: stopped." >&2
 exit "${requested_exit:-0}"
 ]=]
+end
+
+function M.command(path)
+  return "exec bash " .. quote(path)
 end
 
 return M

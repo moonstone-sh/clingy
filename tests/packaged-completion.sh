@@ -42,10 +42,10 @@ mkdir -p "$MOONSTONE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 registry="$fixture_dir/registry"
 project="$fixture_dir/project"
 project_name="completion-smoke-${fixture_dir##*.}"
-moon registry create "$registry" local
-moon registry push "$registry" \
+moon registry init --file "$registry" --name local
+moon registry --file "$registry" publish \
   --descriptor dist/registry/clingy-example/package.toml \
-  --blob "$archive"
+  --artifact "$archive"
 
 (
   cd "$fixture_dir"
